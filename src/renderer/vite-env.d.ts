@@ -32,6 +32,15 @@ export interface CreatePowerResult {
   power?: ProjectPower;
 }
 
+export interface ReadPowerJsonResult {
+  ok: boolean;
+  reason?: string;
+  powerId?: string;
+  name?: string;
+  filePath?: string;
+  json?: unknown;
+}
+
 declare global {
   interface Window {
     ssc?: {
@@ -43,6 +52,10 @@ declare global {
         formId?: string;
         powerName: string;
       }) => Promise<CreatePowerResult>;
+      readPowerJson: (payload: {
+        rootPath: string;
+        powerId: string;
+      }) => Promise<ReadPowerJsonResult>;
       minimizeWindow: () => Promise<void>;
       toggleMaximizeWindow: () => Promise<boolean>;
       closeWindow: () => Promise<void>;

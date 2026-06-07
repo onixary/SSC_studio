@@ -193,11 +193,46 @@ async function createPower({ rootPath, formId, powerName }) {
   };
 }
 
+async function readPowerJson({ rootPath, powerId }) {
+  const validation = await validateProject(rootPath);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+
+  const powerName = powerNameFromId(powerId);
+  const nameError = validatePowerName(powerName);
+  if (nameError) {
+    return { ok: false, reason: nameError };
+  }
+
+  const paths = projectPaths(rootPath);
+  const filePath = path.join(paths.powersDir, `${powerName}.json`);
+  if (!(await exists(filePath))) {
+    return { ok: false, reason: "Power 文件不存在" };
+  }
+
+  try {
+    return {
+      ok: true,
+      powerId: powerIdFromName(powerName),
+      name: powerName,
+      filePath,
+      json: await readJson(filePath)
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "Power JSON 读取失败"
+    };
+  }
+}
+
 module.exports = {
   createPower,
   getProjectData,
   powerNameFromId,
   projectPaths,
+  readPowerJson,
   validatePowerName,
   validateProject
 };

@@ -1,10 +1,14 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { CreatePowerResult, ProjectData, ProjectForm, ProjectPower, ProjectValidation } from "./vite-env";
+import { PowerBlueprintCanvas } from "./modules/power-blueprint/ui/BlueprintCanvas";
 import "./styles/app.css";
 
 type View = "menu" | "power";
 type PendingAction = null | (() => void | Promise<void>);
+
+const INDEPENDENT_POWER_SCOPE = "__independent_powers__";
+const SAVED_PROJECT_ROOT_KEY = "ssc-studio:last-valid-project-root";
 
 const EMPTY_VALIDATION: ProjectValidation = {
   ok: false,
@@ -20,6 +24,31 @@ function App() {
   const [validation, setValidation] = useState<ProjectValidation>(EMPTY_VALIDATION);
   const [errorMessage, setErrorMessage] = useState("");
 
+  React.useEffect(() => {
+    if (!window.ssc) return;
+
+    const savedRoot = window.localStorage.getItem(SAVED_PROJECT_ROOT_KEY);
+    if (!savedRoot) return;
+
+    let canceled = false;
+    window.ssc.validateProject(savedRoot).then((nextValidation) => {
+      if (canceled) return;
+      if (nextValidation.ok) {
+        setValidation(nextValidation);
+      } else {
+        window.localStorage.removeItem(SAVED_PROJECT_ROOT_KEY);
+      }
+    }).catch(() => {
+      if (!canceled) {
+        window.localStorage.removeItem(SAVED_PROJECT_ROOT_KEY);
+      }
+    });
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   const selectProject = useCallback(async () => {
     if (!window.ssc) {
       setErrorMessage("目录选择需要在 Electron 桌面窗口中使用。");
@@ -30,8 +59,10 @@ function App() {
     if (!result.canceled) {
       setValidation(result.validation);
       if (!result.validation.ok) {
+        window.localStorage.removeItem(SAVED_PROJECT_ROOT_KEY);
         setErrorMessage("未检测到 SSC 项目文件，请重新选择目录。");
       } else {
+        window.localStorage.setItem(SAVED_PROJECT_ROOT_KEY, result.validation.rootPath ?? "");
         setErrorMessage("");
       }
     }
@@ -199,7 +230,10 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     void loadData();
   }, [loadData]);
 
-  const selectedForm = data?.forms.find((form) => form.id === selectedFormId) ?? null;
+  const isIndependentScope = selectedFormId === INDEPENDENT_POWER_SCOPE;
+  const selectedForm = isIndependentScope ? null : data?.forms.find((form) => form.id === selectedFormId) ?? null;
+  const hasPowerScope = isIndependentScope || Boolean(selectedForm);
+  const selectedScopeLabel = isIndependentScope ? "独立 Power" : selectedForm?.id ?? "";
   const powerById = useMemo(() => {
     const map = new Map<string, ProjectPower>();
     for (const power of data?.powers ?? []) {
@@ -208,10 +242,26 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     return map;
   }, [data]);
 
+  const referencedPowerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const form of data?.forms ?? []) {
+      for (const powerId of form.powers) {
+        ids.add(powerId);
+      }
+    }
+    return ids;
+  }, [data]);
+
+  const independentPowers = useMemo(
+    () => (data?.powers ?? []).filter((power) => !referencedPowerIds.has(power.id)),
+    [data, referencedPowerIds]
+  );
+
   const visiblePowers = useMemo(() => {
+    if (isIndependentScope) return independentPowers;
     if (!selectedForm) return [];
     return selectedForm.powers.map((powerId) => powerById.get(powerId)).filter(Boolean) as ProjectPower[];
-  }, [powerById, selectedForm]);
+  }, [independentPowers, isIndependentScope, powerById, selectedForm]);
 
   const selectedPower = powerById.get(selectedPowerId) ?? null;
 
@@ -250,6 +300,13 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     [runGuarded]
   );
 
+  const selectIndependentPowers = useCallback(() => {
+    runGuarded(() => {
+      setSelectedFormId(INDEPENDENT_POWER_SCOPE);
+      setSelectedPowerId("");
+    });
+  }, [runGuarded]);
+
   const selectPower = useCallback(
     (power: ProjectPower) => {
       runGuarded(() => {
@@ -280,7 +337,7 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     setCreateError("");
     const result: CreatePowerResult = await window.ssc.createPower({
       rootPath: projectRoot,
-      formId: selectedFormId,
+      formId: isIndependentScope ? undefined : selectedFormId,
       powerName: createName
     });
 
@@ -293,7 +350,7 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     await loadData();
     setSelectedPowerId(result.power.id);
     setDirty(false);
-  }, [createName, loadData, projectRoot, selectedFormId]);
+  }, [createName, isIndependentScope, loadData, projectRoot, selectedFormId]);
 
   return (
     <main className="power-page">
@@ -303,13 +360,22 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
         </button>
         <div>
           <h1>Power 蓝图</h1>
-          <p>{selectedForm ? `选中形态：${selectedForm.id}${dirty ? " *" : ""}` : "未选中形态"}</p>
+          <p>{hasPowerScope ? `当前分类：${selectedScopeLabel}${dirty ? " *" : ""}` : "未选中分类"}</p>
         </div>
       </header>
 
       <section className="blueprint-shell">
         <aside className="form-column">
           <div className="column-title">选择要配置的形态</div>
+          <div className="independent-power-box">
+            <button
+              className={isIndependentScope ? "list-button independent-button selected" : "list-button independent-button"}
+              onClick={selectIndependentPowers}
+            >
+              <span>独立 Power</span>
+              <small>{independentPowers.length} 个未绑定 Power</small>
+            </button>
+          </div>
           <div className="scroll-list">
             {data?.forms.map((form) => (
               <button
@@ -325,7 +391,7 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
 
         <aside className="power-column">
           <div className="column-title">选择或新建 Power</div>
-          <button className="secondary-button" disabled={!selectedForm} onClick={requestCreate}>
+          <button className="secondary-button" disabled={!hasPowerScope} onClick={requestCreate}>
             + 新建 Power
           </button>
           <div className="scroll-list">
@@ -356,11 +422,11 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
           </div>
 
           <BlueprintPlaceholder
+            projectRoot={projectRoot}
             loading={loading}
             error={pageError}
-            selectedForm={selectedForm}
+            hasPowerScope={hasPowerScope}
             selectedPower={selectedPower}
-            dirty={dirty}
           />
         </section>
       </section>
@@ -387,17 +453,17 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
 }
 
 function BlueprintPlaceholder({
+  projectRoot,
   loading,
   error,
-  selectedForm,
-  selectedPower,
-  dirty
+  hasPowerScope,
+  selectedPower
 }: {
+  projectRoot: string;
   loading: boolean;
   error: string;
-  selectedForm: ProjectForm | null;
+  hasPowerScope: boolean;
   selectedPower: ProjectPower | null;
-  dirty: boolean;
 }) {
   if (loading) {
     return <div className="workspace-message">正在读取项目数据...</div>;
@@ -407,29 +473,15 @@ function BlueprintPlaceholder({
     return <div className="workspace-message error-text">{error}</div>;
   }
 
-  if (!selectedForm) {
-    return <div className="workspace-message">请选择要配置的形态</div>;
+  if (!hasPowerScope) {
+    return <div className="workspace-message">请选择要配置的形态或独立 Power</div>;
   }
 
   if (!selectedPower) {
     return <div className="workspace-message">请选择或新建 Power</div>;
   }
 
-  return (
-    <div className="blueprint-canvas">
-      <div className="canvas-node root-node">
-        <span>Power</span>
-        <strong>{selectedPower.name}</strong>
-        <small>{selectedPower.type}</small>
-      </div>
-      <div className="canvas-line" />
-      <div className="canvas-node detail-node">
-        <span>占位蓝图区域</span>
-        <strong>{dirty ? "当前蓝图存在未保存修改" : "当前蓝图已保存"}</strong>
-        <small>{selectedPower.filePath}</small>
-      </div>
-    </div>
-  );
+  return <PowerBlueprintCanvas projectRoot={projectRoot} powerId={selectedPower.id} />;
 }
 
 function CreatePowerDialog({

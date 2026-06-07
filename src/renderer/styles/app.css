@@ -333,6 +333,38 @@ button:disabled {
   margin: 10px;
 }
 
+.independent-power-box {
+  padding: 8px;
+  border-bottom: 1px solid #3c444d;
+  background: #1a2027;
+}
+
+.independent-button {
+  min-height: 54px;
+  margin-bottom: 0;
+  border-color: #4d6178;
+  background: #202a35;
+}
+
+.independent-button span,
+.independent-button small {
+  display: block;
+}
+
+.independent-button span {
+  color: #eef4fb;
+}
+
+.independent-button small {
+  margin-top: 5px;
+  color: #96a5b6;
+  font-size: 12px;
+}
+
+.independent-button.selected small {
+  color: #c8dcff;
+}
+
 .scroll-list {
   min-height: 0;
   flex: 1;
@@ -472,6 +504,446 @@ button:disabled {
   width: 110px;
   height: 1px;
   background: #697683;
+}
+
+.react-flow-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #1b2025;
+}
+
+.react-flow-shell .react-flow__pane {
+  cursor: grab;
+}
+
+.react-flow-shell .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.react-flow-shell .react-flow__controls {
+  border: 1px solid #3d4650;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.react-flow-shell .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-bottom: 1px solid #3d4650;
+  border-radius: 0;
+  background: #20252b;
+  color: #d7dce2;
+}
+
+.react-flow-shell .react-flow__controls-button:hover {
+  background: #303741;
+}
+
+.react-flow-shell .react-flow__controls-button svg {
+  fill: #d7dce2;
+}
+
+.react-flow-shell .react-flow__edge-path {
+  stroke: #768595;
+  stroke-width: 2;
+}
+
+.react-flow-shell .react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3.4;
+  filter: drop-shadow(0 0 5px rgba(230, 238, 247, 0.65));
+}
+
+.react-flow-shell .react-flow__selection {
+  border: 1px solid #dfe6ef;
+  background: rgba(120, 166, 255, 0.12);
+}
+
+.react-flow-shell .blueprint-edge-power .react-flow__edge-path {
+  stroke: #78a6ff;
+}
+
+.react-flow-shell .blueprint-edge-action .react-flow__edge-path {
+  stroke: #6ca57b;
+}
+
+.react-flow-shell .blueprint-edge-condition .react-flow__edge-path {
+  stroke: #c39b57;
+}
+
+.react-flow-shell .blueprint-edge-datatype .react-flow__edge-path {
+  stroke: #69a8a9;
+}
+
+.react-flow-shell .blueprint-edge-unknown .react-flow__edge-path {
+  stroke: #a76060;
+}
+
+.blueprint-node {
+  --node-border: #53606e;
+  --node-bg: #242a31;
+  --node-header-bg: rgba(0,0,0,0.16);
+  position: relative;
+  width: 260px;
+  border: 1px solid var(--node-border);
+  background: var(--node-bg);
+  color: #d7dce2;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.25);
+  cursor: grab;
+}
+
+.blueprint-node:active {
+  cursor: grabbing;
+}
+
+.react-flow-shell .react-flow__node.selected .blueprint-node {
+  outline: 2px solid #e7edf5;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 1px rgba(231,237,245,0.38), 0 14px 32px rgba(0,0,0,0.35);
+}
+
+.blueprint-node-power {
+  --node-border: #78a6ff;
+  --node-bg: #1f2d44;
+  --node-header-bg: #263b5c;
+}
+
+.blueprint-node-action {
+  --node-border: #6ca57b;
+  --node-bg: #1f3328;
+  --node-header-bg: #294536;
+}
+
+.blueprint-node-condition {
+  --node-border: #c39b57;
+  --node-bg: #3a2f1f;
+  --node-header-bg: #514025;
+}
+
+.blueprint-node-datatype {
+  --node-border: #69a8a9;
+  --node-bg: #1e3537;
+  --node-header-bg: #294b4e;
+}
+
+.blueprint-node-unknown {
+  --node-border: #8d5151;
+  --node-bg: #332323;
+  --node-header-bg: #4a2b2b;
+}
+
+.blueprint-node-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.14);
+  background: var(--node-header-bg);
+}
+
+.blueprint-node-header span,
+.blueprint-node-header strong,
+.blueprint-node-header small {
+  display: block;
+}
+
+.blueprint-node-header span {
+  color: #95a0ad;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.blueprint-node-header strong {
+  margin-top: 5px;
+  color: #eef4fb;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.blueprint-node-header small {
+  margin-top: 5px;
+  color: #aab4bf;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.blueprint-node-fields {
+  display: grid;
+  gap: 7px;
+  padding: 10px 0 12px 12px;
+  justify-items: start;
+  overflow: visible;
+}
+
+.blueprint-node-empty {
+  margin-right: 12px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.035);
+  color: #8f99a5;
+  font-size: 12px;
+}
+
+.blueprint-field {
+  --field-border: rgba(255,255,255,0.12);
+  --field-bg: #1d2228;
+  --field-handle: #78a6ff;
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: max-content max-content;
+  gap: 10px;
+  align-items: center;
+  width: max-content;
+  min-width: 248px;
+  min-height: 28px;
+  margin-left: 14px;
+  padding: 5px 8px 5px 9px;
+  border: 1px solid var(--field-border);
+  background: var(--field-bg);
+  font-size: 12px;
+}
+
+.blueprint-field.connected {
+  border-color: var(--field-border);
+}
+
+.blueprint-field-power {
+  --field-border: #678ac0;
+  --field-bg: #1d2a3f;
+  --field-handle: #78a6ff;
+}
+
+.blueprint-field-action {
+  --field-border: #5d916c;
+  --field-bg: #1c2f25;
+  --field-handle: #6ca57b;
+}
+
+.blueprint-field-condition {
+  --field-border: #a9864b;
+  --field-bg: #342b1f;
+  --field-handle: #c39b57;
+}
+
+.blueprint-field-datatype {
+  --field-border: #5f9698;
+  --field-bg: #1d3234;
+  --field-handle: #69a8a9;
+}
+
+.blueprint-field-unknown {
+  --field-border: #8d5151;
+  --field-bg: #332323;
+  --field-handle: #a76060;
+}
+
+.blueprint-field-scalar {
+  --field-border: #dfe6ef;
+  --field-bg: #1f252c;
+  --field-handle: #cfd6df;
+  color: #eef4fb;
+}
+
+.blueprint-field-scalar .field-name {
+  color: #eef4fb;
+}
+
+.blueprint-field-scalar .field-value {
+  color: #c1cbd6;
+}
+
+.field-name {
+  color: #c9d2dc;
+  white-space: nowrap;
+}
+
+.field-value {
+  color: #92a0af;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.field-value-input {
+  width: auto;
+  min-width: 7ch;
+  max-width: none;
+  height: 22px;
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 0;
+  background: rgba(0,0,0,0.18);
+  color: inherit;
+  text-align: left;
+  padding: 0 5px;
+  justify-self: start;
+  white-space: nowrap;
+}
+
+.field-value-input:focus {
+  outline: 1px solid #dfe6ef;
+  outline-offset: 1px;
+}
+
+.field-toggle {
+  display: inline-block;
+  width: 32px;
+  min-width: 32px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid #8d5151;
+  background: #3a2222;
+  justify-self: start;
+}
+
+.field-toggle span {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid #b16060;
+  background: #4a2828;
+}
+
+.field-toggle span::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  background: #e48b8b;
+}
+
+.field-toggle.checked {
+  border-color: #6ca57b;
+  background: #1c2f25;
+}
+
+.field-toggle.checked span {
+  border-color: #6ca57b;
+  background: #254332;
+}
+
+.field-toggle.checked span::after {
+  left: 14px;
+  background: #8fd39f;
+}
+
+.node-input-handle.react-flow__handle {
+  top: 18px;
+  left: -7px;
+  width: 11px;
+  height: 11px;
+  border: 1px solid #c6d0dc;
+  background: #1b2025;
+}
+
+.field-output-handle.react-flow__handle {
+  right: -7px;
+  width: 11px;
+  height: 11px;
+  border: 1px solid #d2d9e2;
+  background: var(--field-handle);
+}
+
+.node-create-menu {
+  position: fixed;
+  width: 300px;
+  max-height: 420px;
+  z-index: 8;
+  border: 1px solid #59636e;
+  background: #20252b;
+  box-shadow: 0 18px 46px rgba(0,0,0,0.38);
+  transform: translate(8px, 8px);
+}
+
+.node-create-menu-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+  padding: 8px;
+  border-bottom: 1px solid #3d4650;
+  background: #171b1f;
+}
+
+.node-create-menu-header input {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #5c6672;
+  border-radius: 0;
+  background: #111417;
+  color: #eef4fb;
+  padding: 0 8px;
+}
+
+.node-create-menu-header button {
+  width: 34px;
+  height: 30px;
+  padding: 0;
+}
+
+.node-create-menu-list {
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.node-create-menu-list button {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 6px;
+  padding: 7px 9px;
+  text-align: left;
+  background: #252b32;
+}
+
+.node-create-menu-list button span,
+.node-create-menu-list button small {
+  display: block;
+}
+
+.node-create-menu-list button small {
+  margin-top: 4px;
+  color: #96a1ad;
+  overflow-wrap: anywhere;
+}
+
+.node-create-empty {
+  padding: 18px 10px;
+  color: #96a1ad;
+  text-align: center;
+}
+
+.optional-fields-panel {
+  width: min(640px, calc(100vw - 48px));
+}
+
+.optional-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.optional-fields-grid h3 {
+  margin: 0 0 8px;
+  color: #cbd3dc;
+  font-size: 14px;
+}
+
+.optional-fields-grid button {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 6px;
+  text-align: left;
+  padding: 0 10px;
+}
+
+.optional-field-empty {
+  min-height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #8f99a5;
+  font-size: 13px;
 }
 
 .canvas-line::after {

@@ -1,6 +1,6 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
-const { createPower, getProjectData, validateProject } = require("./workspace.cjs");
+const { createPower, getProjectData, readPowerJson, validateProject } = require("./workspace.cjs");
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -45,6 +45,7 @@ app.whenReady().then(() => {
   ipcMain.handle("workspace:validateProject", async (_event, rootPath) => validateProject(rootPath));
   ipcMain.handle("workspace:getProjectData", async (_event, rootPath) => getProjectData(rootPath));
   ipcMain.handle("workspace:createPower", async (_event, payload) => createPower(payload));
+  ipcMain.handle("workspace:readPowerJson", async (_event, payload) => readPowerJson(payload));
   ipcMain.handle("window:minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
