@@ -1,0 +1,564 @@
+:root {
+  font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  color: #d7dce2;
+  background: #121416;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #4a5159;
+  border-radius: 0;
+  background: #252a30;
+  color: #e5e9ee;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: #303741;
+  border-color: #6b7682;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.app-shell {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 34px minmax(0, 1fr);
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255,255,255,0.018) 1px, transparent 1px),
+    #14171a;
+  background-size: 32px 32px;
+}
+
+.app-titlebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  height: 34px;
+  border-bottom: 1px solid #343b43;
+  background: #171b1f;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-label {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #8f98a3;
+  font-size: 12px;
+}
+
+.window-controls {
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.window-control {
+  width: 46px;
+  height: 33px;
+  border: 0;
+  border-left: 1px solid #2f363d;
+  background: #171b1f;
+  color: #c3cad2;
+  padding: 0;
+}
+
+.window-control:hover:not(:disabled) {
+  background: #2c333b;
+  border-color: #3c454f;
+}
+
+.window-control.close:hover:not(:disabled) {
+  background: #7a2a2a;
+  color: #ffffff;
+}
+
+.main-menu,
+.power-page {
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+}
+
+.menu-frame {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  height: 100%;
+  border: 1px solid #3a4148;
+  border-top: 0;
+  background: #1a1e22;
+}
+
+.logo-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border-right: 1px solid #3a4148;
+  background: #181b1f;
+}
+
+.logo-mark {
+  width: 84px;
+  height: 84px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #56616d;
+  color: #78a6ff;
+  font-size: 26px;
+  letter-spacing: 0;
+}
+
+.logo-caption {
+  margin-top: 14px;
+  color: #9aa4af;
+}
+
+.menu-content {
+  position: relative;
+  padding: 88px 72px;
+}
+
+.window-strip {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 32px;
+  background: #3a4046;
+  border-bottom: 1px solid #505861;
+}
+
+.project-row {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  max-width: 900px;
+}
+
+.project-status {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #3e4650;
+  padding: 13px 16px;
+  background: #20252b;
+  color: #b6bec8;
+}
+
+.project-status strong,
+.project-status span {
+  display: block;
+}
+
+.project-status span {
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-status.ok {
+  border-color: #4d8065;
+  color: #c6f0d7;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.plain-button,
+.tool-button,
+.back-button {
+  min-height: 38px;
+  padding: 0 16px;
+}
+
+.primary-button,
+.secondary-button {
+  border-color: #5d715f;
+  background: #243329;
+  color: #dff4df;
+}
+
+.danger-button {
+  border-color: #8d5151;
+  background: #422525;
+  color: #ffe3e3;
+}
+
+.plain-button {
+  background: #24292f;
+}
+
+.notice-line {
+  margin-top: 16px;
+  color: #e3ba74;
+}
+
+.module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  max-width: 980px;
+  margin-top: 70px;
+}
+
+.module-button {
+  min-height: 112px;
+  padding: 18px;
+  text-align: left;
+  background: #20252b;
+}
+
+.module-button span {
+  display: block;
+  font-size: 18px;
+  color: #eef3f7;
+}
+
+.module-button small {
+  display: block;
+  margin-top: 12px;
+  color: #9fa9b5;
+  line-height: 1.5;
+}
+
+.module-button.active {
+  border-color: #6682aa;
+}
+
+.module-button.disabled {
+  border-color: #3d454d;
+}
+
+.empty-menu-state {
+  margin-top: 84px;
+  color: #8f98a3;
+}
+
+.power-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  color: #d7dce2;
+}
+
+.power-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 56px;
+  border: 1px solid #394149;
+  border-top: 0;
+  background: #1b2025;
+  padding: 10px;
+}
+
+.power-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.power-header p {
+  margin: 4px 0 0;
+  color: #97a1ad;
+}
+
+.back-button {
+  background: #3b2626;
+  border-color: #8d5151;
+}
+
+.blueprint-shell {
+  display: grid;
+  grid-template-columns: 168px 188px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  border: 1px solid #384048;
+  border-top: 0;
+  background: #171b1f;
+}
+
+.form-column,
+.power-column {
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid #384048;
+  background: #20252b;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-column {
+  background: #1f2630;
+}
+
+.power-column {
+  background: #251f30;
+}
+
+.column-title {
+  min-height: 36px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #3c444d;
+  background: #171b1f;
+  color: #ccd3db;
+  font-size: 13px;
+}
+
+.power-column > .secondary-button {
+  margin: 10px;
+}
+
+.scroll-list {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 8px;
+}
+
+.scroll-list::-webkit-scrollbar,
+.blueprint-canvas::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scroll-list::-webkit-scrollbar-track,
+.blueprint-canvas::-webkit-scrollbar-track {
+  background: #15191d;
+}
+
+.scroll-list::-webkit-scrollbar-thumb,
+.blueprint-canvas::-webkit-scrollbar-thumb {
+  background: #46515d;
+  border: 2px solid #15191d;
+}
+
+.list-button {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 6px;
+  padding: 0 9px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.list-button.selected {
+  border-color: #78a6ff;
+  background: #243855;
+  color: #f1f6ff;
+}
+
+.blueprint-workspace {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 44px minmax(0, 1fr);
+  background: #181c20;
+}
+
+.workspace-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid #384048;
+  background: #1e2328;
+}
+
+.tool-button {
+  min-height: 30px;
+  font-size: 13px;
+}
+
+.workspace-message {
+  display: grid;
+  place-items: center;
+  color: #cbd3dc;
+  font-size: 18px;
+  text-align: center;
+  padding: 24px;
+}
+
+.error-text {
+  color: #ff8f8f;
+}
+
+.blueprint-canvas {
+  position: relative;
+  min-height: 100%;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(255,255,255,0.035) 1px, transparent 1px),
+    #1b2025;
+  background-size: 28px 28px;
+  overflow: auto;
+}
+
+.canvas-node {
+  position: absolute;
+  width: 250px;
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid #53606e;
+  background: #242a31;
+}
+
+.canvas-node span,
+.canvas-node strong,
+.canvas-node small {
+  display: block;
+}
+
+.canvas-node span {
+  color: #8fa0b4;
+}
+
+.canvas-node strong {
+  margin-top: 8px;
+  color: #eef4fb;
+}
+
+.canvas-node small {
+  margin-top: 8px;
+  color: #a8b2bd;
+  overflow-wrap: anywhere;
+}
+
+.root-node {
+  top: 110px;
+  left: 110px;
+  border-color: #78a6ff;
+}
+
+.detail-node {
+  top: 270px;
+  left: 420px;
+}
+
+.canvas-line {
+  position: absolute;
+  top: 214px;
+  left: 360px;
+  width: 110px;
+  height: 1px;
+  background: #697683;
+}
+
+.canvas-line::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  top: -4px;
+  border-left: 6px solid #697683;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.58);
+  z-index: 10;
+}
+
+.modal-panel {
+  min-width: 360px;
+  max-width: 560px;
+  border: 1px solid #59636e;
+  background: #20252b;
+  padding: 22px;
+  box-shadow: 0 18px 56px rgba(0,0,0,0.42);
+}
+
+.modal-panel.error,
+.modal-panel.warning {
+  border-color: #8d5151;
+}
+
+.modal-panel h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+.modal-panel p {
+  margin: 0 0 16px;
+  color: #c5ccd4;
+}
+
+.text-input {
+  width: 100%;
+  height: 38px;
+  border: 1px solid #5c6672;
+  border-radius: 0;
+  background: #15181c;
+  color: #f0f4f8;
+  padding: 0 10px;
+}
+
+.input-help {
+  min-height: 20px;
+  margin: 10px 0 0;
+  color: #96a1ad;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .main-menu,
+  .power-page {
+    padding: 0;
+  }
+
+  .menu-frame {
+    grid-template-columns: 120px minmax(0, 1fr);
+  }
+
+  .menu-content {
+    padding: 64px 24px;
+  }
+
+  .project-row {
+    flex-direction: column;
+  }
+
+  .blueprint-shell {
+    grid-template-columns: 128px 148px minmax(0, 1fr);
+  }
+}
