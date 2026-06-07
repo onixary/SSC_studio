@@ -1,2 +1,12 @@
 # SSC_studio
-A developer editor project for the Minecraft Java Edition mod Shape Shifter Curse, aims to simplify the configuration of some complex modules.
+Minecraft Java端模组Shape Shifter Curse的开发者编辑器，旨在简化一些复杂模块的配置
+
+当前正处于早期开发中，预计的功能：
+
+> \[ - \] 形态能力可视化蓝图编辑器
+> 
+> \[ - \] 形态贴图配置器
+> 
+> \[ - \] 形态描述配置器
+
+本项目使用AI工具开发
