@@ -5,6 +5,7 @@ export type SlotKind =
   | "item_action"
   | "item_condition"
   | "bientity_action"
+  | "bientity_condition"
   | "block_action"
   | "block_condition"
   | "damage_condition"
@@ -21,6 +22,7 @@ export type FieldValueKind =
   | "slot"
   | "slot_array"
   | "datatype"
+  | "datatype_array"
   | "unknown";
 
 export interface FieldSchema {

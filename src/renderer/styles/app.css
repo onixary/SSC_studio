@@ -294,7 +294,7 @@ button:disabled {
 
 .blueprint-shell {
   display: grid;
-  grid-template-columns: 168px 188px minmax(0, 1fr);
+  grid-template-columns: 210px 235px minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   border: 1px solid #384048;
@@ -394,11 +394,14 @@ button:disabled {
   width: 100%;
   min-height: 32px;
   margin-bottom: 6px;
-  padding: 0 9px;
+  padding: 7px 9px;
   text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 12px;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.12);
 }
@@ -877,7 +880,7 @@ button:disabled {
 
 .node-create-menu {
   position: fixed;
-  width: 300px;
+  width: 450px;
   max-height: 420px;
   z-index: 8;
   border: 1px solid #59636e;
@@ -917,9 +920,59 @@ button:disabled {
   padding: 8px;
 }
 
-.node-create-menu-list button {
-  display: block;
+.node-menu-drawer {
+  margin-bottom: 6px;
+}
+
+.node-menu-drawer-title {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
   width: 100%;
+  min-height: 34px;
+  margin-bottom: 4px;
+  padding: 0 9px;
+  text-align: left;
+  background: #1c2228;
+  border-color: #3d4650;
+}
+
+.node-menu-drawer.level-1 .node-menu-drawer-title {
+  background: #222830;
+}
+
+.node-menu-drawer.level-2 .node-menu-drawer-title {
+  background: #252b32;
+}
+
+.node-menu-drawer-title span,
+.node-menu-drawer-title strong,
+.node-menu-drawer-title small {
+  display: block;
+}
+
+.node-menu-drawer-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.node-menu-drawer-title small {
+  min-width: 24px;
+  color: #96a1ad;
+  text-align: right;
+}
+
+.node-menu-drawer-body {
+  margin-bottom: 4px;
+}
+
+.node-create-option {
+  display: block;
+  width: calc(100% - 10px);
   min-height: 48px;
   margin-bottom: 6px;
   padding: 7px 9px;
@@ -927,12 +980,12 @@ button:disabled {
   background: #252b32;
 }
 
-.node-create-menu-list button span,
-.node-create-menu-list button small {
+.node-create-option span,
+.node-create-option small {
   display: block;
 }
 
-.node-create-menu-list button small {
+.node-create-option small {
   margin-top: 4px;
   color: #96a1ad;
   overflow-wrap: anywhere;

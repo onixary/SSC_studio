@@ -121,7 +121,7 @@ function buildFieldValue(
     return undefined;
   }
 
-  if (schema.valueKind === "slot_array") {
+  if (schema.valueKind === "slot_array" || schema.valueKind === "datatype_array") {
     if (schema.required && connectedEdges.length === 0) {
       throw new Error(`保存失败：必填数组参数 ${field.name} 尚未连接任何节点。`);
     }

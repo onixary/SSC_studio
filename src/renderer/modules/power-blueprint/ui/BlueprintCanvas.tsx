@@ -36,6 +36,8 @@ export interface PowerBlueprintCanvasProps {
 
 export interface PowerBlueprintCanvasHandle {
   save: () => Promise<boolean>;
+  undo: () => boolean;
+  redo: () => boolean;
 }
 
 interface BlueprintNodeData extends Record<string, unknown> {
@@ -51,6 +53,13 @@ interface NodeMenuState {
   slotKind?: SlotKind;
   datatype?: string;
   pendingConnection?: PendingConnection;
+}
+
+interface NodeMenuCategory {
+  id: string;
+  label: string;
+  schemas: NodeSchema[];
+  children: NodeMenuCategory[];
 }
 
 interface PendingConnection {
@@ -69,11 +78,18 @@ interface BlueprintNodeInteraction {
   selectNode: (nodeId: string) => void;
 }
 
+interface BlueprintHistorySnapshot {
+  nodes: BlueprintFlowNode[];
+  edges: Edge[];
+}
+
 const BlueprintNodeInteractionContext = React.createContext<BlueprintNodeInteraction | null>(null);
 
 const nodeTypes = {
   blueprintNode: BlueprintNodeView
 };
+
+const HISTORY_LIMIT = 80;
 
 const PowerBlueprintCanvasWithRef = React.forwardRef<PowerBlueprintCanvasHandle, PowerBlueprintCanvasProps>(BlueprintCanvasInner);
 PowerBlueprintCanvasWithRef.displayName = "PowerBlueprintCanvas";
@@ -101,10 +117,48 @@ function BlueprintCanvasInner(
   const connectSucceededRef = useRef(false);
   const nextNodeIdRef = useRef(1);
   const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
+  const undoStackRef = useRef<BlueprintHistorySnapshot[]>([]);
+  const redoStackRef = useRef<BlueprintHistorySnapshot[]>([]);
+  const dragStartSnapshotRef = useRef<BlueprintHistorySnapshot | null>(null);
 
   const markDirty = useCallback(() => {
     onDirtyChange?.(true);
   }, [onDirtyChange]);
+
+  const currentHistorySnapshot = useCallback(
+    () => createHistorySnapshot(nodes, edges),
+    [edges, nodes]
+  );
+
+  const pushHistorySnapshot = useCallback((snapshot: BlueprintHistorySnapshot) => {
+    undoStackRef.current = [...undoStackRef.current, snapshot].slice(-HISTORY_LIMIT);
+    redoStackRef.current = [];
+  }, []);
+
+  const restoreHistorySnapshot = useCallback(
+    (snapshot: BlueprintHistorySnapshot) => {
+      setNodes(cloneFlowNodes(snapshot.nodes));
+      setEdges(cloneEdges(snapshot.edges));
+      markDirty();
+    },
+    [markDirty]
+  );
+
+  const undo = useCallback(() => {
+    const previous = undoStackRef.current.pop();
+    if (!previous) return false;
+    redoStackRef.current.push(currentHistorySnapshot());
+    restoreHistorySnapshot(previous);
+    return true;
+  }, [currentHistorySnapshot, restoreHistorySnapshot]);
+
+  const redo = useCallback(() => {
+    const next = redoStackRef.current.pop();
+    if (!next) return false;
+    undoStackRef.current.push(currentHistorySnapshot());
+    restoreHistorySnapshot(next);
+    return true;
+  }, [currentHistorySnapshot, restoreHistorySnapshot]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BlueprintFlowNode>[]) => {
@@ -119,11 +173,12 @@ function BlueprintCanvasInner(
   const onEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
       if (changes.some((change) => change.type === "remove")) {
+        pushHistorySnapshot(currentHistorySnapshot());
         markDirty();
       }
       setEdges((current) => applyEdgeChanges(changes, current));
     },
-    [markDirty, setEdges]
+    [currentHistorySnapshot, markDirty, pushHistorySnapshot, setEdges]
   );
 
   const makeEdge = useCallback((source: string, target: string, sourceHandle: string, color: string): Edge => {
@@ -157,17 +212,18 @@ function BlueprintCanvasInner(
       const sourceField = findSourceField(nodes, connection.source, connection.sourceHandle);
       if (!sourceField) return;
       const schema = sourceField.schema;
-      const multi = schema.valueKind === "slot_array";
+      const multi = schema.valueKind === "slot_array" || schema.valueKind === "datatype_array";
       if (!canConnect(connection.sourceHandle, connection.target, multi)) return;
 
       connectSucceededRef.current = true;
+      pushHistorySnapshot(currentHistorySnapshot());
       setEdges((current) => [
         ...current,
         makeEdge(connection.source!, connection.target!, connection.sourceHandle!, sourceField.field.color)
       ]);
       markDirty();
     },
-    [canConnect, makeEdge, markDirty, nodes]
+    [canConnect, currentHistorySnapshot, makeEdge, markDirty, nodes, pushHistorySnapshot]
   );
 
   const openNodeMenu = useCallback((screenPosition: XYPosition, options?: Partial<NodeMenuState>) => {
@@ -178,6 +234,10 @@ function BlueprintCanvasInner(
       query: "",
       ...options
     });
+  }, []);
+
+  const closeNodeMenu = useCallback(() => {
+    setNodeMenu(null);
   }, []);
 
   const onConnectStart = useCallback(
@@ -195,7 +255,7 @@ function BlueprintCanvasInner(
         color: sourceField.field.color,
         slotKind: sourceField.schema.slotKind,
         datatype: sourceField.schema.datatype,
-        multi: sourceField.schema.valueKind === "slot_array"
+        multi: sourceField.schema.valueKind === "slot_array" || sourceField.schema.valueKind === "datatype_array"
       };
     },
     [nodes]
@@ -245,6 +305,7 @@ function BlueprintCanvasInner(
         draggable: true
       };
 
+      pushHistorySnapshot(currentHistorySnapshot());
       setNodes((current) => [...current, nextNode]);
       if (nodeMenu.pendingConnection && canConnect(nodeMenu.pendingConnection.sourceHandle, id, nodeMenu.pendingConnection.multi)) {
         setEdges((current) => [
@@ -260,14 +321,18 @@ function BlueprintCanvasInner(
       markDirty();
       setNodeMenu(null);
     },
-    [canConnect, makeEdge, markDirty, nodeMenu]
+    [canConnect, currentHistorySnapshot, makeEdge, markDirty, nodeMenu, pushHistorySnapshot]
   );
 
-  const openOptionalFields = useCallback((_event: React.MouseEvent, node: BlueprintFlowNode) => {
+  const openOptionalFields = useCallback((event: React.MouseEvent, node: BlueprintFlowNode) => {
+    event.preventDefault();
     setOptionalNodeId(node.id);
   }, []);
 
   const addOptionalField = useCallback((nodeId: string, field: FieldSchema) => {
+    const targetNode = nodes.find((node) => node.id === nodeId);
+    if (!targetNode || targetNode.data.graphNode.fields.some((existing) => existing.name === field.name)) return;
+    pushHistorySnapshot(currentHistorySnapshot());
     setNodes((current) =>
       current.map((node) => {
         if (node.id !== nodeId) return node;
@@ -281,9 +346,12 @@ function BlueprintCanvasInner(
       })
     );
     markDirty();
-  }, [markDirty]);
+  }, [currentHistorySnapshot, markDirty, nodes, pushHistorySnapshot]);
 
   const removeOptionalField = useCallback((nodeId: string, fieldName: string) => {
+    const targetNode = nodes.find((node) => node.id === nodeId);
+    if (!targetNode || !targetNode.data.graphNode.fields.some((field) => field.name === fieldName)) return;
+    pushHistorySnapshot(currentHistorySnapshot());
     setNodes((current) =>
       current.map((node) => {
         if (node.id !== nodeId) return node;
@@ -297,7 +365,7 @@ function BlueprintCanvasInner(
     );
     setEdges((current) => current.filter((edge) => edge.sourceHandle !== sourceHandleId(nodeId, fieldName)));
     markDirty();
-  }, [markDirty]);
+  }, [currentHistorySnapshot, markDirty, nodes, pushHistorySnapshot]);
 
   const closeOptionalFields = useCallback(() => {
     setOptionalNodeId(null);
@@ -311,7 +379,11 @@ function BlueprintCanvasInner(
   const renamePowerNode = useCallback((nodeId: string, rawName: string) => {
     const nextName = rawName.trim();
     if (!isValidPowerNodeName(nextName)) return false;
+    const targetNode = nodes.find((node) => node.id === nodeId);
+    if (!targetNode || targetNode.data.graphNode.kind !== "power") return false;
+    if (targetNode.data.graphNode.label === nextName && targetNode.data.graphNode.title === nextName) return true;
 
+    pushHistorySnapshot(currentHistorySnapshot());
     setNodes((current) =>
       current.map((node) => {
         if (node.id !== nodeId || node.data.graphNode.kind !== "power") return node;
@@ -331,7 +403,7 @@ function BlueprintCanvasInner(
     );
     markDirty();
     return true;
-  }, [markDirty]);
+  }, [currentHistorySnapshot, markDirty, nodes, pushHistorySnapshot]);
 
   const commitFieldValue = useCallback((nodeId: string, fieldName: string, rawValue: string) => {
     const targetNode = nodes.find((node) => node.id === nodeId);
@@ -340,7 +412,9 @@ function BlueprintCanvasInner(
 
     const nextDisplayValue = parseInputValue(rawValue, targetField.inputKind);
     if (nextDisplayValue === null) return false;
+    if (targetField.displayValue === nextDisplayValue) return true;
 
+    pushHistorySnapshot(currentHistorySnapshot());
     setNodes((current) =>
       current.map((node) => {
         if (node.id !== nodeId) return node;
@@ -360,11 +434,11 @@ function BlueprintCanvasInner(
     );
     markDirty();
     return true;
-  }, [markDirty, nodes]);
+  }, [currentHistorySnapshot, markDirty, nodes, pushHistorySnapshot]);
 
   const saveCurrentBlueprint = useCallback(async () => {
     if (!window.ssc) {
-      setSaveError("保存需要在 Electron 桌面窗口中使用。");
+      setSaveError("Save requires the Electron desktop window.");
       return false;
     }
 
@@ -376,14 +450,14 @@ function BlueprintCanvasInner(
       const json = serializePowerAstToJson(ast);
       const powerResult = await window.ssc.savePowerJson({ rootPath: projectRoot, powerId, json });
       if (!powerResult.ok) {
-        setSaveError(powerResult.reason ?? "Power JSON 保存失败。");
+        setSaveError(powerResult.reason ?? "Power JSON save failed.");
         return false;
       }
 
       const state = createBlueprintState(powerId, graph, flowInstanceRef.current?.getViewport());
       const blueprintResult = await window.ssc.saveBlueprintState({ rootPath: projectRoot, powerId, state });
       if (!blueprintResult.ok) {
-        setSaveError(blueprintResult.reason ?? "蓝图状态保存失败。");
+        setSaveError(blueprintResult.reason ?? "Blueprint state save failed.");
         return false;
       }
 
@@ -391,14 +465,14 @@ function BlueprintCanvasInner(
       onDirtyChange?.(false);
       return true;
     } catch (saveErrorValue) {
-      setSaveError(saveErrorValue instanceof Error ? saveErrorValue.message : "Power 蓝图保存失败。");
+      setSaveError(saveErrorValue instanceof Error ? saveErrorValue.message : "Power blueprint save failed.");
       return false;
     } finally {
       setSaving(false);
     }
   }, [baseAst, edges, nodes, onDirtyChange, powerId, projectRoot, registry]);
 
-  React.useImperativeHandle(ref, () => ({ save: saveCurrentBlueprint }), [saveCurrentBlueprint]);
+  React.useImperativeHandle(ref, () => ({ save: saveCurrentBlueprint, undo, redo }), [redo, saveCurrentBlueprint, undo]);
 
   useEffect(() => {
     setNodes((current) => synchronizeFieldConnectionState(current, edges));
@@ -409,6 +483,7 @@ function BlueprintCanvasInner(
     const selectedEdgeIds = new Set(edges.filter((edge) => edge.selected).map((edge) => edge.id));
     if (selectedNodeIds.size === 0 && selectedEdgeIds.size === 0) return false;
 
+    pushHistorySnapshot(currentHistorySnapshot());
     setNodes((current) => current.filter((node) => !selectedNodeIds.has(node.id)));
     setEdges((current) =>
       current.filter(
@@ -420,7 +495,7 @@ function BlueprintCanvasInner(
     );
     markDirty();
     return true;
-  }, [edges, markDirty, nodes]);
+  }, [currentHistorySnapshot, edges, markDirty, nodes, pushHistorySnapshot]);
 
   useEffect(() => {
     let canceled = false;
@@ -428,7 +503,7 @@ function BlueprintCanvasInner(
     async function load() {
       if (!window.ssc) {
         setLoading(false);
-        setError("Power JSON 读取需要在 Electron 桌面窗口中使用。");
+        setError("Power JSON loading requires the Electron desktop window.");
         setBaseAst(null);
         onDirtyChange?.(false);
         setNodes([]);
@@ -440,6 +515,9 @@ function BlueprintCanvasInner(
       setError("");
       setSaveError("");
       setBaseAst(null);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      dragStartSnapshotRef.current = null;
       onDirtyChange?.(false);
       const result = await window.ssc.readPowerJson({ rootPath: projectRoot, powerId });
 
@@ -447,7 +525,7 @@ function BlueprintCanvasInner(
 
       if (!result.ok || result.json === undefined) {
         setLoading(false);
-        setError(result.reason ?? "Power JSON 读取失败。");
+        setError(result.reason ?? "Power JSON load failed.");
         setBaseAst(null);
         onDirtyChange?.(false);
         setNodes([]);
@@ -495,7 +573,7 @@ function BlueprintCanvasInner(
         }
       } catch (loadError) {
         setLoading(false);
-        setError(loadError instanceof Error ? loadError.message : "Power 蓝图生成失败。");
+        setError(loadError instanceof Error ? loadError.message : "Power blueprint generation failed.");
         setBaseAst(null);
         onDirtyChange?.(false);
         setNodes([]);
@@ -546,6 +624,30 @@ function BlueprintCanvasInner(
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if (key === "y") {
+        event.preventDefault();
+        redo();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [redo, undo]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
       if (nodeMenu || optionalNodeId) return;
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       const target = event.target as HTMLElement | null;
@@ -591,6 +693,26 @@ function BlueprintCanvasInner(
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
           onNodeDoubleClick={openOptionalFields}
+          onNodeContextMenu={openOptionalFields}
+          onPaneClick={closeNodeMenu}
+          onNodeClick={closeNodeMenu}
+          onEdgeClick={closeNodeMenu}
+          onNodeDragStart={() => {
+            dragStartSnapshotRef.current = currentHistorySnapshot();
+          }}
+          onNodeDragStop={(_event, node) => {
+            const snapshot = dragStartSnapshotRef.current;
+            dragStartSnapshotRef.current = null;
+            if (!snapshot) return;
+            const beforeNode = snapshot.nodes.find((candidate) => candidate.id === node.id);
+            if (!beforeNode || positionsEqual(beforeNode.position, node.position)) return;
+            pushHistorySnapshot(snapshot);
+            markDirty();
+          }}
+          onPaneContextMenu={(event) => {
+            event.preventDefault();
+            openNodeMenu({ x: event.clientX, y: event.clientY });
+          }}
           onInit={(instance) => {
             flowInstanceRef.current = instance;
             if (pendingViewportRef.current) {
@@ -621,7 +743,7 @@ function BlueprintCanvasInner(
             schemas={registry.list()}
             onQueryChange={(query) => setNodeMenu((current) => (current ? { ...current, query } : current))}
             onCreate={createNodeFromSchema}
-            onClose={() => setNodeMenu(null)}
+            onClose={closeNodeMenu}
           />
         )}
 
@@ -674,7 +796,7 @@ function BlueprintNodeView({ data }: NodeProps<BlueprintFlowNode>) {
       </header>
       <div className="blueprint-node-fields">
         {node.fields.length === 0 ? (
-          <div className="blueprint-node-empty">无参数</div>
+          <div className="blueprint-node-empty">No parameters</div>
         ) : (
           node.fields.map((field) => <BlueprintFieldRow key={field.name} field={field} />)
         )}
@@ -731,7 +853,10 @@ function BlueprintFieldRow({ field }: { field: BlueprintGraphField }) {
       ) : (
         <span className="field-value">{field.displayValue}</span>
       )}
-      {(field.valueKind === "slot" || field.valueKind === "slot_array" || field.valueKind === "datatype") && (
+      {(field.valueKind === "slot" ||
+        field.valueKind === "slot_array" ||
+        field.valueKind === "datatype" ||
+        field.valueKind === "datatype_array") && (
         <Handle
           id={field.sourceHandleId}
           type="source"
@@ -852,6 +977,46 @@ function reactFlowToBlueprintGraph(nodes: BlueprintFlowNode[], edges: Edge[]): B
   };
 }
 
+function createHistorySnapshot(nodes: BlueprintFlowNode[], edges: Edge[]): BlueprintHistorySnapshot {
+  return {
+    nodes: cloneFlowNodes(nodes),
+    edges: cloneEdges(edges)
+  };
+}
+
+function cloneFlowNodes(nodes: BlueprintFlowNode[]): BlueprintFlowNode[] {
+  return nodes.map((node) => ({
+    ...node,
+    position: { ...node.position },
+    data: {
+      ...node.data,
+      graphNode: cloneGraphNode(node.data.graphNode)
+    }
+  }));
+}
+
+function cloneGraphNode(node: BlueprintGraphNode): BlueprintGraphNode {
+  return {
+    ...node,
+    position: { ...node.position },
+    fields: node.fields.map((field) => ({
+      ...field,
+      schema: { ...field.schema }
+    }))
+  };
+}
+
+function cloneEdges(edges: Edge[]): Edge[] {
+  return edges.map((edge) => ({
+    ...edge,
+    data: edge.data ? { ...edge.data } : edge.data
+  }));
+}
+
+function positionsEqual(left: XYPosition, right: XYPosition) {
+  return left.x === right.x && left.y === right.y;
+}
+
 function createBlueprintState(
   powerId: string,
   graph: BlueprintGraph,
@@ -960,7 +1125,14 @@ function synchronizeFieldConnectionState(nodes: BlueprintFlowNode[], edges: Edge
     const graphNode = node.data.graphNode;
     let nodeChanged = false;
     const nextFields = graphNode.fields.map((field) => {
-      if (field.valueKind !== "slot" && field.valueKind !== "slot_array" && field.valueKind !== "datatype") return field;
+      if (
+        field.valueKind !== "slot" &&
+        field.valueKind !== "slot_array" &&
+        field.valueKind !== "datatype" &&
+        field.valueKind !== "datatype_array"
+      ) {
+        return field;
+      }
 
       const connectedEdges = edgesBySourceHandle.get(field.sourceHandleId) ?? [];
       const connected = connectedEdges.length > 0;
@@ -988,14 +1160,14 @@ function synchronizeFieldConnectionState(nodes: BlueprintFlowNode[], edges: Edge
 }
 
 function connectionDisplayValue(field: BlueprintGraphField, edges: Edge[], nodeTitles: Map<string, string>) {
-  if (field.valueKind === "slot_array") return `Array[${edges.length}]`;
+  if (field.valueKind === "slot_array" || field.valueKind === "datatype_array") return `Array[${edges.length}]`;
   const targetTitle = nodeTitles.get(edges[0]?.target ?? "");
-  return targetTitle ? `-> ${targetTitle}` : "已连接";
+  return targetTitle ? `-> ${targetTitle}` : "Connected";
 }
 
 function disconnectedDisplayValue(field: BlueprintGraphField) {
-  if (field.valueKind === "slot_array") return "Array[0]";
-  return "未连接";
+  if (field.valueKind === "slot_array" || field.valueKind === "datatype_array") return "Array[0]";
+  return "Disconnected";
 }
 
 function NodeCreateMenu({
@@ -1011,6 +1183,9 @@ function NodeCreateMenu({
   onCreate: (schema: NodeSchema) => void;
   onClose: () => void;
 }) {
+  const [expandedDrawers, setExpandedDrawers] = useState<Set<string>>(
+    () => new Set(["data_type", "power", "action", "condition", "misc"])
+  );
   const query = state.query.trim().toLowerCase();
   const filteredSchemas = schemas.filter((schema) => {
     if (schema.type === "origins:multiple") return false;
@@ -1020,6 +1195,22 @@ function NodeCreateMenu({
     const title = schema.title ?? readableTypeName(schema.type);
     return `${title} ${schema.type} ${schema.kind}`.toLowerCase().includes(query);
   });
+  const menuSchemas = useMemo(() => normalizeNodeMenuSchemas(filteredSchemas, state.slotKind), [filteredSchemas, state.slotKind]);
+  const categories = useMemo(() => buildNodeMenuCategories(menuSchemas), [menuSchemas]);
+  const resultCount = countCategorySchemas(categories);
+  const searchActive = query.length > 0;
+
+  const toggleDrawer = useCallback((id: string) => {
+    setExpandedDrawers((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <section className="node-create-menu" style={{ left: state.screenPosition.x, top: state.screenPosition.y }}>
@@ -1033,19 +1224,221 @@ function NodeCreateMenu({
         <button onClick={onClose}>x</button>
       </div>
       <div className="node-create-menu-list">
-        {filteredSchemas.length === 0 ? (
+        {resultCount === 0 ? (
           <div className="node-create-empty">没有匹配节点</div>
         ) : (
-          filteredSchemas.map((schema) => (
-            <button key={`${schema.kind}:${schema.type}`} onClick={() => onCreate(schema)}>
-              <span>{schema.title ?? readableTypeName(schema.type)}</span>
-              <small>{schema.kind} · {schema.type}</small>
-            </button>
+          categories.map((category) => (
+            <NodeMenuDrawer
+              key={category.id}
+              category={category}
+              level={0}
+              forceOpen={searchActive}
+              expandedDrawers={expandedDrawers}
+              onToggle={toggleDrawer}
+              onCreate={onCreate}
+            />
           ))
         )}
       </div>
     </section>
   );
+}
+
+function normalizeNodeMenuSchemas(schemas: NodeSchema[], slotKind?: SlotKind): NodeSchema[] {
+  if (slotKind) return schemas;
+
+  const output: NodeSchema[] = [];
+  const seen = new Set<string>();
+
+  for (const schema of schemas) {
+    const key = menuSchemaKey(schema);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(schema);
+  }
+
+  return output;
+}
+
+function menuSchemaKey(schema: NodeSchema) {
+  if (schema.type === "origins:and" && schema.kind.includes("action")) return "origins:and#action";
+  if (schema.type === "origins:and" && schema.kind.includes("condition")) return "origins:and#condition";
+  return `${schema.type}#${schema.kind}`;
+}
+
+function NodeMenuDrawer({
+  category,
+  level,
+  forceOpen,
+  expandedDrawers,
+  onToggle,
+  onCreate
+}: {
+  category: NodeMenuCategory;
+  level: number;
+  forceOpen: boolean;
+  expandedDrawers: Set<string>;
+  onToggle: (id: string) => void;
+  onCreate: (schema: NodeSchema) => void;
+}) {
+  const count = countCategorySchemas([category]);
+  if (count === 0) return null;
+
+  const open = forceOpen || expandedDrawers.has(category.id);
+  return (
+    <section className={`node-menu-drawer level-${level}`}>
+      <button
+        type="button"
+        className="node-menu-drawer-title"
+        style={{ paddingLeft: 10 + level * 14 }}
+        onClick={() => onToggle(category.id)}
+      >
+        <span>{open ? "v" : ">"}</span>
+        <strong>{category.label}</strong>
+        <small>{count}</small>
+      </button>
+      {open && (
+        <div className="node-menu-drawer-body">
+          {category.children.map((child) => (
+            <NodeMenuDrawer
+              key={child.id}
+              category={child}
+              level={level + 1}
+              forceOpen={forceOpen}
+              expandedDrawers={expandedDrawers}
+              onToggle={onToggle}
+              onCreate={onCreate}
+            />
+          ))}
+          {category.schemas.map((schema) => (
+            <button
+              key={`${schema.kind}:${schema.type}`}
+              className="node-create-option"
+              style={{
+                marginLeft: 10 + level * 14,
+                width: `calc(100% - ${10 + level * 14}px)`
+              }}
+              onClick={() => onCreate(schema)}
+            >
+              <span>{schema.title ?? readableTypeName(schema.type)}</span>
+              <small>{schema.kind} · {schema.type}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function buildNodeMenuCategories(schemas: NodeSchema[]): NodeMenuCategory[] {
+  const roots = [
+    createCategory("data_type", "Data Type"),
+    createCategory("power", "Power"),
+    createCategory("action", "Action"),
+    createCategory("condition", "Condition"),
+    createCategory("misc", "Misc")
+  ];
+  const rootById = new Map(roots.map((category) => [category.id, category]));
+
+  for (const schema of schemas) {
+    const path = categoryPathForSchema(schema);
+    const rootSegment = path[0];
+    if (!rootSegment) continue;
+    const rootCategory = rootById.get(rootSegment.id);
+    if (!rootCategory) continue;
+    let current: NodeMenuCategory = rootCategory;
+
+    for (const segment of path.slice(1)) {
+      let next: NodeMenuCategory | undefined = current.children.find((child) => child.id === segment.id);
+      if (!next) {
+        next = createCategory(segment.id, segment.label);
+        current.children.push(next);
+      }
+      current = next;
+    }
+
+    current.schemas.push(schema);
+  }
+
+  return roots.filter((category) => countCategorySchemas([category]) > 0);
+}
+
+function createCategory(id: string, label: string): NodeMenuCategory {
+  return { id, label, children: [], schemas: [] };
+}
+
+function countCategorySchemas(categories: NodeMenuCategory[]): number {
+  return categories.reduce(
+    (total, category) =>
+      total + category.schemas.length + countCategorySchemas(category.children),
+    0
+  );
+}
+
+function categoryPathForSchema(schema: NodeSchema) {
+  if (schema.kind === "datatype") {
+    return [
+      { id: "data_type", label: "Data Types" }
+    ];
+  }
+
+  if (schema.kind === "power") {
+    return [
+      { id: "power", label: "Power Types" }
+    ];
+  }
+
+  if (schema.kind.includes("action")) {
+    return [
+      { id: "action", label: "Action Types" },
+      actionTypeCategory(schema)
+    ];
+  }
+
+  if (schema.kind.includes("condition")) {
+    return [
+      { id: "condition", label: "Condition Types" },
+      conditionTypeCategory(schema)
+    ];
+  }
+
+  return [
+    { id: "misc", label: "Misc" },
+    namespaceCategory("misc", schema)
+  ];
+}
+
+function namespaceCategory(prefix: string, schema: NodeSchema) {
+  const namespace = schema.type.includes(":") ? schema.type.split(":")[0] : "studio";
+  return {
+    id: `${prefix}_namespace_${namespace.replace(/[^a-z0-9_]+/gi, "_")}`,
+    label: namespace === "shape-shifter-curse" ? "Shape Shifter Curse" : readableTypeName(namespace)
+  };
+}
+
+function actionTypeCategory(schema: NodeSchema) {
+  if (isMetaNode(schema)) return { id: "action_meta", label: "Meta Action Types" };
+  if (schema.kind === "bientity_action") return { id: "action_bientity", label: "Bi-entity Action Types" };
+  if (schema.kind === "block_action") return { id: "action_block", label: "Block Action Types" };
+  if (schema.kind === "entity_action") return { id: "action_entity", label: "Entity Action Types" };
+  if (schema.kind === "item_action") return { id: "action_item", label: "Item Action Types" };
+  return { id: "action_other", label: "Other Action Types" };
+}
+
+function conditionTypeCategory(schema: NodeSchema) {
+  if (isMetaNode(schema)) return { id: "condition_meta", label: "Meta Condition Types" };
+  if (schema.kind === "bientity_condition") return { id: "condition_bientity", label: "Bi-entity Condition Types" };
+  if (schema.kind === "biome_condition") return { id: "condition_biome", label: "Biome Condition Types" };
+  if (schema.kind === "block_condition") return { id: "condition_block", label: "Block Condition Types" };
+  if (schema.kind === "damage_condition") return { id: "condition_damage", label: "Damage Condition Types" };
+  if (schema.kind === "entity_condition") return { id: "condition_entity", label: "Entity Condition Types" };
+  if (schema.kind === "fluid_condition") return { id: "condition_fluid", label: "Fluid Condition Types" };
+  if (schema.kind === "item_condition") return { id: "condition_item", label: "Item Condition Types" };
+  return { id: "condition_other", label: "Other Condition Types" };
+}
+
+function isMetaNode(schema: NodeSchema) {
+  return ["origins:and", "origins:or", "origins:chance", "origins:if_else", "origins:choice"].includes(schema.type);
 }
 
 function OptionalFieldsDialog({
@@ -1073,13 +1466,13 @@ function OptionalFieldsDialog({
   return (
     <div className="modal-backdrop">
       <section className="modal-panel optional-fields-panel">
-        <h2>可选参数</h2>
+        <h2>Optional Parameters</h2>
         <p>{graphNode.title}</p>
         <div className="optional-fields-grid">
           <section>
             <h3>添加参数</h3>
             {addableFields.length === 0 ? (
-              <div className="optional-field-empty">没有可添加参数</div>
+              <div className="optional-field-empty">No addable parameters</div>
             ) : (
               addableFields.map((field) => (
                 <button key={field.name} onClick={() => onAdd(node.id, field)}>
@@ -1091,7 +1484,7 @@ function OptionalFieldsDialog({
           <section>
             <h3>删除参数</h3>
             {removableFields.length === 0 ? (
-              <div className="optional-field-empty">没有可删除参数</div>
+              <div className="optional-field-empty">No removable parameters</div>
             ) : (
               removableFields.map((field) => (
                 <button key={field.name} onClick={() => onRemove(node.id, field.name)}>
@@ -1130,8 +1523,8 @@ function inputKindForFieldSchema(field: FieldSchema): BlueprintGraphField["input
 }
 
 function displayDefaultValue(field: FieldSchema) {
-  if (field.valueKind === "slot" || field.valueKind === "datatype") return "未连接";
-  if (field.valueKind === "slot_array") return "Array[0]";
+  if (field.valueKind === "slot" || field.valueKind === "datatype") return "Disconnected";
+  if (field.valueKind === "slot_array" || field.valueKind === "datatype_array") return "Array[0]";
   if (field.defaultValue === undefined) return "";
   if (field.defaultValue === null) return "null";
   return String(field.defaultValue);
@@ -1141,7 +1534,7 @@ function colorForFieldSchema(field: FieldSchema, nodeColor: string) {
   if (field.valueKind === "slot" || field.valueKind === "slot_array") {
     return colorForSlotKind(field.slotKind ?? "unknown");
   }
-  if (field.valueKind === "datatype") return "datatype";
+  if (field.valueKind === "datatype" || field.valueKind === "datatype_array") return "datatype";
   return "scalar";
 }
 
@@ -1172,6 +1565,14 @@ function createFieldSchemaFromGraphField(field: BlueprintGraphField): FieldSchem
       name: fieldName,
       valueKind: field.valueKind,
       slotKind: colorToSlotKind(field.color),
+      multi: true
+    };
+  }
+  if (field.valueKind === "datatype_array") {
+    return {
+      name: fieldName,
+      valueKind: field.valueKind,
+      datatype: field.schema.datatype ?? datatypeFromFieldName(fieldName),
       multi: true
     };
   }

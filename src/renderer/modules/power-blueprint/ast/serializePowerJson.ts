@@ -33,10 +33,14 @@ function serializeFieldValue(value: AstValue, valueKind: string, datatype?: stri
     return serializeDatatype(value, datatype);
   }
 
+  if (valueKind === "datatype_array") {
+    return Array.isArray(value) ? value.map((item) => serializeDatatype(item, datatype)) : [];
+  }
+
   return value;
 }
 
-function serializeDatatype(value: AstValue, datatype?: string): unknown {
+function serializeDatatype(value: unknown, datatype?: string): unknown {
   if (!isAstNode(value)) {
     return value;
   }
@@ -63,9 +67,69 @@ function serializeDatatype(value: AstValue, datatype?: string): unknown {
     return keys.length === 1 && typeof particle.type === "string" ? particle.type : particle;
   }
 
-  return serializeNode(value);
+  const scalarFieldName = datatype ? scalarDatatypeFieldName(datatype) : undefined;
+  if (scalarFieldName) {
+    const scalarField = value.fields.find((field) => field.name === scalarFieldName);
+    if (scalarField) {
+      return serializeFieldValue(scalarField.value, scalarField.schema.valueKind, scalarField.schema.datatype);
+    }
+  }
+
+  return serializeDatatypeObject(value);
+}
+
+function serializeDatatypeObject(node: AstNode): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+
+  for (const field of node.fields) {
+    output[field.name] = serializeFieldValue(field.value, field.schema.valueKind, field.schema.datatype);
+  }
+
+  for (const unknownField of node.unknownFields) {
+    if (unknownField.name !== "type" && !(unknownField.name in output)) {
+      output[unknownField.name] = unknownField.value;
+    }
+  }
+
+  return output;
 }
 
 function isAstNode(value: unknown): value is AstNode {
   return value !== null && typeof value === "object" && "id" in value && "fields" in value;
+}
+
+function scalarDatatypeFieldName(datatype: string) {
+  if (datatype === "crafting_recipe") return "recipe";
+  if (datatype === "default_translatable_text_component") return "translate";
+  if (datatype === "ingredient" || datatype === "item_stack") return "item";
+  if (datatype === "text") return "text";
+
+  if (
+    [
+      "action_result",
+      "attribute_modifier_operation",
+      "attributed_attribute_modifier_operation",
+      "comparison",
+      "container_type",
+      "destruction_type",
+      "entity_type_tag_like",
+      "fluid_handling",
+      "heightmap_type",
+      "identifier",
+      "inventory_type",
+      "item_slot",
+      "material",
+      "nbt",
+      "player_ability",
+      "process_mode",
+      "shape",
+      "shape_type",
+      "space",
+      "stat"
+    ].includes(datatype)
+  ) {
+    return "value";
+  }
+
+  return undefined;
 }

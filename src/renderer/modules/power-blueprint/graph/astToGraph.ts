@@ -44,7 +44,7 @@ export function astToBlueprintGraph(ast: PowerAst, registry: BlueprintSchemaRegi
         }
       }
 
-      if (field.schema.valueKind === "slot_array" && Array.isArray(field.value)) {
+      if ((field.schema.valueKind === "slot_array" || field.schema.valueKind === "datatype_array") && Array.isArray(field.value)) {
         field.value.forEach((item, index) => {
           if (!isAstNode(item)) return;
           visit(item, depth + 1);
@@ -69,7 +69,9 @@ export function astToBlueprintGraph(ast: PowerAst, registry: BlueprintSchemaRegi
 function toGraphField(nodeId: string, field: AstField, nodeColor: string): BlueprintGraphField {
   const connected =
     (isAstNode(field.value) && (field.schema.valueKind === "slot" || field.schema.valueKind === "datatype")) ||
-    (Array.isArray(field.value) && field.schema.valueKind === "slot_array" && field.value.some(isAstNode));
+    (Array.isArray(field.value) &&
+      (field.schema.valueKind === "slot_array" || field.schema.valueKind === "datatype_array") &&
+      field.value.some(isAstNode));
 
   return {
     name: field.name,
@@ -95,7 +97,7 @@ function colorForField(field: AstField, nodeColor: string) {
     return colorForSlotKind(field.schema.slotKind ?? "unknown");
   }
 
-  if (field.schema.valueKind === "datatype") {
+  if (field.schema.valueKind === "datatype" || field.schema.valueKind === "datatype_array") {
     return "datatype";
   }
 
@@ -132,7 +134,7 @@ export function targetHandleId(nodeId: string) {
 }
 
 function displayValue(value: AstValue, valueKind: string) {
-  if (valueKind === "slot_array" && Array.isArray(value)) {
+  if ((valueKind === "slot_array" || valueKind === "datatype_array") && Array.isArray(value)) {
     return `Array[${value.length}]`;
   }
 

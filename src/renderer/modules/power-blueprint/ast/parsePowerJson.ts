@@ -47,6 +47,10 @@ function parseNode(value: unknown, fallbackKind: SlotKind, context: ParseContext
       const explicitSchema = fieldSchemas.find((field) => field.name === fieldName);
       const inferredSchema = explicitSchema ?? context.registry.inferFieldSchema(kind, fieldName, fieldValue);
       knownFieldNames.add(fieldName);
+      if (inferredSchema.valueKind === "unknown" && Array.isArray(fieldValue)) {
+        unknownFields.push({ name: fieldName, value: fieldValue });
+        continue;
+      }
       fields.push({
         name: fieldName,
         value: parseFieldValue(fieldValue, inferredSchema, context),
@@ -87,6 +91,12 @@ function parseFieldValue(value: unknown, schema: FieldSchema, context: ParseCont
     return parseDatatype(value, schema.datatype ?? "unknown", context);
   }
 
+  if (schema.valueKind === "datatype_array") {
+    return Array.isArray(value)
+      ? value.map((item) => parseDatatype(item, schema.datatype ?? "unknown", context))
+      : [];
+  }
+
   return value as string | number | boolean | null | unknown[];
 }
 
@@ -99,7 +109,12 @@ function parseDatatype(value: unknown, datatype: string, context: ParseContext) 
     return parseNode({ type: "vector", ...(isRecord(value) ? value : {}) }, "datatype", context);
   }
 
-  return parseNode(value, "datatype", context);
+  const scalarFieldName = scalarDatatypeFieldName(datatype);
+  if (scalarFieldName && !isRecord(value)) {
+    return parseNode({ type: datatype, [scalarFieldName]: value }, "datatype", context);
+  }
+
+  return parseNode({ type: datatype, ...(isRecord(value) ? value : {}) }, "datatype", context);
 }
 
 function parseParticleEffect(value: unknown, context: ParseContext): AstNode {
@@ -140,4 +155,40 @@ function parseParticleEffect(value: unknown, context: ParseContext): AstNode {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function scalarDatatypeFieldName(datatype: string) {
+  if (datatype === "crafting_recipe") return "recipe";
+  if (datatype === "default_translatable_text_component") return "translate";
+  if (datatype === "ingredient" || datatype === "item_stack") return "item";
+  if (datatype === "text") return "text";
+
+  if (
+    [
+      "action_result",
+      "attribute_modifier_operation",
+      "attributed_attribute_modifier_operation",
+      "comparison",
+      "container_type",
+      "destruction_type",
+      "entity_type_tag_like",
+      "fluid_handling",
+      "heightmap_type",
+      "identifier",
+      "inventory_type",
+      "item_slot",
+      "material",
+      "nbt",
+      "player_ability",
+      "process_mode",
+      "shape",
+      "shape_type",
+      "space",
+      "stat"
+    ].includes(datatype)
+  ) {
+    return "value";
+  }
+
+  return undefined;
 }

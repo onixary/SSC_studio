@@ -76,6 +76,17 @@ async function listJsonFiles(dirPath) {
     .sort((a, b) => a.localeCompare(b));
 }
 
+function uniqueStrings(values) {
+  const seen = new Set();
+  const output = [];
+  for (const value of values) {
+    if (typeof value !== "string" || seen.has(value)) continue;
+    seen.add(value);
+    output.push(value);
+  }
+  return output;
+}
+
 async function getProjectData(rootPath) {
   const validation = await validateProject(rootPath);
   if (!validation.ok) {
@@ -112,7 +123,7 @@ async function getProjectData(rootPath) {
     let powers = [];
     try {
       const data = await readJson(fullPath);
-      powers = Array.isArray(data.powers) ? data.powers.filter((item) => typeof item === "string") : [];
+      powers = Array.isArray(data.powers) ? uniqueStrings(data.powers) : [];
     } catch {
       powers = [];
     }

@@ -261,7 +261,15 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
   const visiblePowers = useMemo(() => {
     if (isIndependentScope) return independentPowers;
     if (!selectedForm) return [];
-    return selectedForm.powers.map((powerId) => powerById.get(powerId)).filter(Boolean) as ProjectPower[];
+    const seenPowerIds = new Set<string>();
+    const output: ProjectPower[] = [];
+    for (const powerId of selectedForm.powers) {
+      if (seenPowerIds.has(powerId)) continue;
+      seenPowerIds.add(powerId);
+      const power = powerById.get(powerId);
+      if (power) output.push(power);
+    }
+    return output;
   }, [independentPowers, isIndependentScope, powerById, selectedForm]);
 
   const selectedPower = powerById.get(selectedPowerId) ?? null;
@@ -420,6 +428,12 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
 
         <section className="blueprint-workspace">
           <div className="workspace-toolbar">
+            <button className="tool-button" disabled={!selectedPower} onClick={() => canvasRef.current?.undo()}>
+              撤销
+            </button>
+            <button className="tool-button" disabled={!selectedPower} onClick={() => canvasRef.current?.redo()}>
+              重做
+            </button>
             <button className="tool-button" disabled={!selectedPower || !dirty} onClick={() => void saveCurrentPower()}>
               保存当前蓝图
             </button>
