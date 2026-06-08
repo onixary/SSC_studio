@@ -20,6 +20,7 @@ function projectPaths(rootPath) {
     fabricMod: path.join(resources, "fabric.mod.json"),
     buildGradle: path.join(rootPath, "build.gradle"),
     gradleProperties: path.join(rootPath, "gradle.properties"),
+    studioBlueprintsDir: path.join(rootPath, ".ssc-studio", "blueprints"),
     originsDir: path.join(dataRoot, "origins"),
     powersDir: path.join(dataRoot, "powers")
   };
@@ -227,12 +228,113 @@ async function readPowerJson({ rootPath, powerId }) {
   }
 }
 
+async function savePowerJson({ rootPath, powerId, json }) {
+  const validation = await validateProject(rootPath);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+
+  const powerName = powerNameFromId(powerId);
+  const nameError = validatePowerName(powerName);
+  if (nameError) {
+    return { ok: false, reason: nameError };
+  }
+
+  const paths = projectPaths(rootPath);
+  const filePath = path.join(paths.powersDir, `${powerName}.json`);
+  if (!(await exists(filePath))) {
+    return { ok: false, reason: "Power 文件不存在" };
+  }
+
+  try {
+    await fs.writeFile(filePath, `${JSON.stringify(json, null, 2)}\n`, "utf-8");
+    return {
+      ok: true,
+      powerId: powerIdFromName(powerName),
+      name: powerName,
+      filePath
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "Power JSON 保存失败"
+    };
+  }
+}
+
+async function readBlueprintState({ rootPath, powerId }) {
+  const validation = await validateProject(rootPath);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+
+  const powerName = powerNameFromId(powerId);
+  const nameError = validatePowerName(powerName);
+  if (nameError) {
+    return { ok: false, reason: nameError };
+  }
+
+  const filePath = path.join(projectPaths(rootPath).studioBlueprintsDir, `${powerName}.json`);
+  if (!(await exists(filePath))) {
+    return { ok: true, powerId: powerIdFromName(powerName), name: powerName, filePath, state: null };
+  }
+
+  try {
+    return {
+      ok: true,
+      powerId: powerIdFromName(powerName),
+      name: powerName,
+      filePath,
+      state: await readJson(filePath)
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "蓝图状态读取失败"
+    };
+  }
+}
+
+async function saveBlueprintState({ rootPath, powerId, state }) {
+  const validation = await validateProject(rootPath);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+
+  const powerName = powerNameFromId(powerId);
+  const nameError = validatePowerName(powerName);
+  if (nameError) {
+    return { ok: false, reason: nameError };
+  }
+
+  const paths = projectPaths(rootPath);
+  const filePath = path.join(paths.studioBlueprintsDir, `${powerName}.json`);
+  try {
+    await fs.mkdir(paths.studioBlueprintsDir, { recursive: true });
+    await fs.writeFile(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf-8");
+    return {
+      ok: true,
+      powerId: powerIdFromName(powerName),
+      name: powerName,
+      filePath
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "蓝图状态保存失败"
+    };
+  }
+}
+
 module.exports = {
   createPower,
   getProjectData,
   powerNameFromId,
   projectPaths,
+  readBlueprintState,
   readPowerJson,
+  saveBlueprintState,
+  savePowerJson,
   validatePowerName,
   validateProject
 };

@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld("ssc", {
   getProjectData: (rootPath) => ipcRenderer.invoke("workspace:getProjectData", rootPath),
   createPower: (payload) => ipcRenderer.invoke("workspace:createPower", payload),
   readPowerJson: (payload) => ipcRenderer.invoke("workspace:readPowerJson", payload),
+  savePowerJson: (payload) => ipcRenderer.invoke("workspace:savePowerJson", payload),
+  readBlueprintState: (payload) => ipcRenderer.invoke("workspace:readBlueprintState", payload),
+  saveBlueprintState: (payload) => ipcRenderer.invoke("workspace:saveBlueprintState", payload),
   minimizeWindow: () => ipcRenderer.invoke("window:minimize"),
   toggleMaximizeWindow: () => ipcRenderer.invoke("window:toggleMaximize"),
   closeWindow: () => ipcRenderer.invoke("window:close")

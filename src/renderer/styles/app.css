@@ -513,6 +513,19 @@ button:disabled {
   background: #1b2025;
 }
 
+.blueprint-save-status {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 7;
+  max-width: min(520px, calc(100% - 24px));
+  border: 1px solid #53606e;
+  background: #20252b;
+  color: #d7dce2;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
 .react-flow-shell .react-flow__pane {
   cursor: grab;
 }
@@ -656,6 +669,25 @@ button:disabled {
   color: #eef4fb;
   font-size: 15px;
   font-weight: 600;
+}
+
+.power-node-name-input {
+  display: block;
+  width: 100%;
+  height: 24px;
+  margin-top: 5px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 0;
+  background: rgba(0,0,0,0.18);
+  color: #eef4fb;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.power-node-name-input:focus {
+  outline: 1px solid #dfe6ef;
+  outline-offset: 1px;
 }
 
 .blueprint-node-header small {

@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { CreatePowerResult, ProjectData, ProjectForm, ProjectPower, ProjectValidation } from "./vite-env";
-import { PowerBlueprintCanvas } from "./modules/power-blueprint/ui/BlueprintCanvas";
+import { PowerBlueprintCanvas, type PowerBlueprintCanvasHandle } from "./modules/power-blueprint/ui/BlueprintCanvas";
 import "./styles/app.css";
 
 type View = "menu" | "power";
@@ -194,6 +194,7 @@ function MainMenu({
 }
 
 function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBack: () => void }) {
+  const canvasRef = React.useRef<PowerBlueprintCanvasHandle | null>(null);
   const [data, setData] = useState<ProjectData | null>(null);
   const [selectedFormId, setSelectedFormId] = useState("");
   const [selectedPowerId, setSelectedPowerId] = useState("");
@@ -276,9 +277,18 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     [dirty]
   );
 
+  const saveCurrentPower = useCallback(async () => {
+    const saved = await canvasRef.current?.save();
+    if (saved) {
+      setDirty(false);
+    }
+    return Boolean(saved);
+  }, []);
+
   const executePending = useCallback(async (saveFirst: boolean) => {
     if (saveFirst) {
-      setDirty(false);
+      const saved = await saveCurrentPower();
+      if (!saved) return;
     } else {
       setDirty(false);
     }
@@ -288,7 +298,7 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     if (action) {
       await action();
     }
-  }, [pendingAction]);
+  }, [pendingAction, saveCurrentPower]);
 
   const selectForm = useCallback(
     (form: ProjectForm) => {
@@ -410,13 +420,10 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
 
         <section className="blueprint-workspace">
           <div className="workspace-toolbar">
-            <button className="tool-button" disabled={!selectedPower || dirty} onClick={() => setDirty(true)}>
-              标记未保存
-            </button>
-            <button className="tool-button" disabled={!dirty} onClick={() => setDirty(false)}>
+            <button className="tool-button" disabled={!selectedPower || !dirty} onClick={() => void saveCurrentPower()}>
               保存当前蓝图
             </button>
-            <button className="tool-button" onClick={loadData}>
+            <button className="tool-button" onClick={() => runGuarded(loadData)}>
               刷新数据
             </button>
           </div>
@@ -427,6 +434,8 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
             error={pageError}
             hasPowerScope={hasPowerScope}
             selectedPower={selectedPower}
+            canvasRef={canvasRef}
+            onDirtyChange={setDirty}
           />
         </section>
       </section>
@@ -457,13 +466,17 @@ function BlueprintPlaceholder({
   loading,
   error,
   hasPowerScope,
-  selectedPower
+  selectedPower,
+  canvasRef,
+  onDirtyChange
 }: {
   projectRoot: string;
   loading: boolean;
   error: string;
   hasPowerScope: boolean;
   selectedPower: ProjectPower | null;
+  canvasRef: React.RefObject<PowerBlueprintCanvasHandle | null>;
+  onDirtyChange: (dirty: boolean) => void;
 }) {
   if (loading) {
     return <div className="workspace-message">正在读取项目数据...</div>;
@@ -481,7 +494,14 @@ function BlueprintPlaceholder({
     return <div className="workspace-message">请选择或新建 Power</div>;
   }
 
-  return <PowerBlueprintCanvas projectRoot={projectRoot} powerId={selectedPower.id} />;
+  return (
+    <PowerBlueprintCanvas
+      ref={canvasRef}
+      projectRoot={projectRoot}
+      powerId={selectedPower.id}
+      onDirtyChange={onDirtyChange}
+    />
+  );
 }
 
 function CreatePowerDialog({

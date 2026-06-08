@@ -41,6 +41,31 @@ export interface ReadPowerJsonResult {
   json?: unknown;
 }
 
+export interface SavePowerJsonResult {
+  ok: boolean;
+  reason?: string;
+  powerId?: string;
+  name?: string;
+  filePath?: string;
+}
+
+export interface BlueprintStateResult {
+  ok: boolean;
+  reason?: string;
+  powerId?: string;
+  name?: string;
+  filePath?: string;
+  state?: unknown;
+}
+
+export interface SaveBlueprintStateResult {
+  ok: boolean;
+  reason?: string;
+  powerId?: string;
+  name?: string;
+  filePath?: string;
+}
+
 declare global {
   interface Window {
     ssc?: {
@@ -56,6 +81,20 @@ declare global {
         rootPath: string;
         powerId: string;
       }) => Promise<ReadPowerJsonResult>;
+      savePowerJson: (payload: {
+        rootPath: string;
+        powerId: string;
+        json: unknown;
+      }) => Promise<SavePowerJsonResult>;
+      readBlueprintState: (payload: {
+        rootPath: string;
+        powerId: string;
+      }) => Promise<BlueprintStateResult>;
+      saveBlueprintState: (payload: {
+        rootPath: string;
+        powerId: string;
+        state: unknown;
+      }) => Promise<SaveBlueprintStateResult>;
       minimizeWindow: () => Promise<void>;
       toggleMaximizeWindow: () => Promise<boolean>;
       closeWindow: () => Promise<void>;

@@ -1,4 +1,5 @@
 import type { FieldValueKind, SlotKind } from "../schema/blueprintSchemaTypes";
+import type { FieldSchema } from "../schema/blueprintSchemaTypes";
 
 export interface BlueprintGraph {
   nodes: BlueprintGraphNode[];
@@ -22,6 +23,7 @@ export interface BlueprintGraphNode {
 
 export interface BlueprintGraphField {
   name: string;
+  schema: FieldSchema;
   valueKind: FieldValueKind;
   displayValue: string;
   connected: boolean;

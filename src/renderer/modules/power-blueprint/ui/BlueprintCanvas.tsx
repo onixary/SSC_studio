@@ -21,7 +21,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import type { FieldSchema, NodeSchema, SlotKind } from "../schema/blueprintSchemaTypes";
 import { astToBlueprintGraph, sourceHandleId } from "../graph/astToGraph";
-import type { BlueprintGraphField, BlueprintGraphNode } from "../graph/blueprintGraphTypes";
+import { graphToPowerAst } from "../graph/graphToAst";
+import type { BlueprintGraph, BlueprintGraphEdge, BlueprintGraphField, BlueprintGraphNode } from "../graph/blueprintGraphTypes";
+import type { PowerAst } from "../ast/powerAstTypes";
 import { parsePowerJsonToAst } from "../ast/parsePowerJson";
 import { serializePowerAstToJson } from "../ast/serializePowerJson";
 import { createExampleSchemaRegistry } from "../schema/exampleSchemas";
@@ -29,6 +31,11 @@ import { createExampleSchemaRegistry } from "../schema/exampleSchemas";
 export interface PowerBlueprintCanvasProps {
   projectRoot: string;
   powerId: string;
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+export interface PowerBlueprintCanvasHandle {
+  save: () => Promise<boolean>;
 }
 
 interface BlueprintNodeData extends Record<string, unknown> {
@@ -58,6 +65,7 @@ interface PendingConnection {
 
 interface BlueprintNodeInteraction {
   commitFieldValue: (nodeId: string, fieldName: string, rawValue: string) => boolean;
+  renamePowerNode: (nodeId: string, rawName: string) => boolean;
   selectNode: (nodeId: string) => void;
 }
 
@@ -67,13 +75,20 @@ const nodeTypes = {
   blueprintNode: BlueprintNodeView
 };
 
-export function PowerBlueprintCanvas(props: PowerBlueprintCanvasProps) {
-  return <BlueprintCanvasInner {...props} />;
-}
+const PowerBlueprintCanvasWithRef = React.forwardRef<PowerBlueprintCanvasHandle, PowerBlueprintCanvasProps>(BlueprintCanvasInner);
+PowerBlueprintCanvasWithRef.displayName = "PowerBlueprintCanvas";
 
-function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProps) {
+export { PowerBlueprintCanvasWithRef as PowerBlueprintCanvas };
+
+function BlueprintCanvasInner(
+  { projectRoot, powerId, onDirtyChange }: PowerBlueprintCanvasProps,
+  ref: React.ForwardedRef<PowerBlueprintCanvasHandle>
+) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [baseAst, setBaseAst] = useState<PowerAst | null>(null);
   const [nodes, setNodes] = useState<BlueprintFlowNode[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null);
@@ -85,19 +100,30 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
   const pendingConnectionRef = useRef<PendingConnection | null>(null);
   const connectSucceededRef = useRef(false);
   const nextNodeIdRef = useRef(1);
+  const pendingViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null);
+
+  const markDirty = useCallback(() => {
+    onDirtyChange?.(true);
+  }, [onDirtyChange]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BlueprintFlowNode>[]) => {
+      if (changes.some((change) => change.type === "position" && "position" in change && change.position)) {
+        markDirty();
+      }
       setNodes((current) => applyNodeChanges(changes, current));
     },
-    [setNodes]
+    [markDirty, setNodes]
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
+      if (changes.some((change) => change.type === "remove")) {
+        markDirty();
+      }
       setEdges((current) => applyEdgeChanges(changes, current));
     },
-    [setEdges]
+    [markDirty, setEdges]
   );
 
   const makeEdge = useCallback((source: string, target: string, sourceHandle: string, color: string): Edge => {
@@ -108,7 +134,11 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
       sourceHandle,
       targetHandle: `${target}:in`,
       type: "straight",
-      className: `blueprint-edge blueprint-edge-${color}`
+      className: `blueprint-edge blueprint-edge-${color}`,
+      data: {
+        color,
+        fieldName: fieldNameFromSourceHandle(sourceHandle)
+      }
     };
   }, []);
 
@@ -135,8 +165,9 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
         ...current,
         makeEdge(connection.source!, connection.target!, connection.sourceHandle!, sourceField.field.color)
       ]);
+      markDirty();
     },
-    [canConnect, makeEdge, nodes]
+    [canConnect, makeEdge, markDirty, nodes]
   );
 
   const openNodeMenu = useCallback((screenPosition: XYPosition, options?: Partial<NodeMenuState>) => {
@@ -226,9 +257,10 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
           )
         ]);
       }
+      markDirty();
       setNodeMenu(null);
     },
-    [canConnect, makeEdge, nodeMenu]
+    [canConnect, makeEdge, markDirty, nodeMenu]
   );
 
   const openOptionalFields = useCallback((_event: React.MouseEvent, node: BlueprintFlowNode) => {
@@ -248,7 +280,8 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
         return { ...node, data: { graphNode: nextGraphNode } };
       })
     );
-  }, []);
+    markDirty();
+  }, [markDirty]);
 
   const removeOptionalField = useCallback((nodeId: string, fieldName: string) => {
     setNodes((current) =>
@@ -263,7 +296,8 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
       })
     );
     setEdges((current) => current.filter((edge) => edge.sourceHandle !== sourceHandleId(nodeId, fieldName)));
-  }, []);
+    markDirty();
+  }, [markDirty]);
 
   const closeOptionalFields = useCallback(() => {
     setOptionalNodeId(null);
@@ -273,6 +307,31 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
     setNodes((current) => current.map((node) => ({ ...node, selected: node.id === nodeId })));
     setEdges((current) => current.map((edge) => ({ ...edge, selected: false })));
   }, []);
+
+  const renamePowerNode = useCallback((nodeId: string, rawName: string) => {
+    const nextName = rawName.trim();
+    if (!isValidPowerNodeName(nextName)) return false;
+
+    setNodes((current) =>
+      current.map((node) => {
+        if (node.id !== nodeId || node.data.graphNode.kind !== "power") return node;
+        const graphNode = node.data.graphNode;
+        if (graphNode.label === nextName && graphNode.title === nextName) return node;
+        return {
+          ...node,
+          data: {
+            graphNode: {
+              ...graphNode,
+              label: nextName,
+              title: nextName
+            }
+          }
+        };
+      })
+    );
+    markDirty();
+    return true;
+  }, [markDirty]);
 
   const commitFieldValue = useCallback((nodeId: string, fieldName: string, rawValue: string) => {
     const targetNode = nodes.find((node) => node.id === nodeId);
@@ -299,8 +358,47 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
         };
       })
     );
+    markDirty();
     return true;
-  }, [nodes]);
+  }, [markDirty, nodes]);
+
+  const saveCurrentBlueprint = useCallback(async () => {
+    if (!window.ssc) {
+      setSaveError("保存需要在 Electron 桌面窗口中使用。");
+      return false;
+    }
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      const graph = reactFlowToBlueprintGraph(nodes, edges);
+      const ast = graphToPowerAst(graph, registry, baseAst ?? undefined);
+      const json = serializePowerAstToJson(ast);
+      const powerResult = await window.ssc.savePowerJson({ rootPath: projectRoot, powerId, json });
+      if (!powerResult.ok) {
+        setSaveError(powerResult.reason ?? "Power JSON 保存失败。");
+        return false;
+      }
+
+      const state = createBlueprintState(powerId, graph, flowInstanceRef.current?.getViewport());
+      const blueprintResult = await window.ssc.saveBlueprintState({ rootPath: projectRoot, powerId, state });
+      if (!blueprintResult.ok) {
+        setSaveError(blueprintResult.reason ?? "蓝图状态保存失败。");
+        return false;
+      }
+
+      setBaseAst(ast);
+      onDirtyChange?.(false);
+      return true;
+    } catch (saveErrorValue) {
+      setSaveError(saveErrorValue instanceof Error ? saveErrorValue.message : "Power 蓝图保存失败。");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [baseAst, edges, nodes, onDirtyChange, powerId, projectRoot, registry]);
+
+  React.useImperativeHandle(ref, () => ({ save: saveCurrentBlueprint }), [saveCurrentBlueprint]);
 
   useEffect(() => {
     setNodes((current) => synchronizeFieldConnectionState(current, edges));
@@ -320,8 +418,9 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
           !selectedNodeIds.has(edge.target)
       )
     );
+    markDirty();
     return true;
-  }, [edges, nodes]);
+  }, [edges, markDirty, nodes]);
 
   useEffect(() => {
     let canceled = false;
@@ -330,6 +429,8 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
       if (!window.ssc) {
         setLoading(false);
         setError("Power JSON 读取需要在 Electron 桌面窗口中使用。");
+        setBaseAst(null);
+        onDirtyChange?.(false);
         setNodes([]);
         setEdges([]);
         return;
@@ -337,6 +438,9 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
 
       setLoading(true);
       setError("");
+      setSaveError("");
+      setBaseAst(null);
+      onDirtyChange?.(false);
       const result = await window.ssc.readPowerJson({ rootPath: projectRoot, powerId });
 
       if (canceled) return;
@@ -344,6 +448,8 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
       if (!result.ok || result.json === undefined) {
         setLoading(false);
         setError(result.reason ?? "Power JSON 读取失败。");
+        setBaseAst(null);
+        onDirtyChange?.(false);
         setNodes([]);
         setEdges([]);
         return;
@@ -352,7 +458,8 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
       try {
         const ast = parsePowerJsonToAst(result.json, registry);
         serializePowerAstToJson(ast);
-        const graph = astToBlueprintGraph(ast, registry);
+        const stateResult = await window.ssc.readBlueprintState({ rootPath: projectRoot, powerId });
+        const graph = applyBlueprintState(astToBlueprintGraph(ast, registry), stateResult.ok ? stateResult.state : null);
         const nextNodes: BlueprintFlowNode[] = graph.nodes.map((node) => ({
           id: node.id,
           type: "blueprintNode",
@@ -367,15 +474,30 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
           sourceHandle: edge.sourceHandle,
           targetHandle: edge.targetHandle,
           type: "straight",
-          className: `blueprint-edge blueprint-edge-${edge.color}`
+          className: `blueprint-edge blueprint-edge-${edge.color}`,
+          data: {
+            color: edge.color,
+            fieldName: edge.fieldName,
+            order: edge.order
+          }
         }));
+        pendingViewportRef.current = blueprintStateViewport(stateResult.ok ? stateResult.state : null);
         nextNodeIdRef.current = graph.nodes.length + 1;
+        setBaseAst(ast);
         setNodes(nextNodes);
         setEdges(nextEdges);
+        onDirtyChange?.(false);
         setLoading(false);
+        const viewport = pendingViewportRef.current;
+        if (viewport && flowInstanceRef.current) {
+          void flowInstanceRef.current.setViewport(viewport);
+          pendingViewportRef.current = null;
+        }
       } catch (loadError) {
         setLoading(false);
         setError(loadError instanceof Error ? loadError.message : "Power 蓝图生成失败。");
+        setBaseAst(null);
+        onDirtyChange?.(false);
         setNodes([]);
         setEdges([]);
       }
@@ -386,7 +508,7 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
     return () => {
       canceled = true;
     };
-  }, [powerId, projectRoot, registry, setEdges, setNodes]);
+  }, [onDirtyChange, powerId, projectRoot, registry, setEdges, setNodes]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -404,6 +526,23 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [nodeMenu, openNodeMenu]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "s") return;
+      event.preventDefault();
+      const target = event.target as HTMLElement | null;
+      if (target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) {
+        target.blur();
+      }
+      window.setTimeout(() => {
+        void saveCurrentBlueprint();
+      }, 0);
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [saveCurrentBlueprint]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -429,7 +568,7 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
   }
 
   return (
-    <BlueprintNodeInteractionContext.Provider value={{ commitFieldValue, selectNode }}>
+    <BlueprintNodeInteractionContext.Provider value={{ commitFieldValue, renamePowerNode, selectNode }}>
       <div
         ref={wrapperRef}
         className="react-flow-shell"
@@ -454,6 +593,10 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
           onNodeDoubleClick={openOptionalFields}
           onInit={(instance) => {
             flowInstanceRef.current = instance;
+            if (pendingViewportRef.current) {
+              void instance.setViewport(pendingViewportRef.current);
+              pendingViewportRef.current = null;
+            }
           }}
           fitView
           fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
@@ -494,6 +637,12 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
             onClose={closeOptionalFields}
           />
         )}
+
+        {(saving || saveError) && (
+          <div className={saveError ? "blueprint-save-status error-text" : "blueprint-save-status"}>
+            {saveError || "正在保存 Power JSON..."}
+          </div>
+        )}
       </div>
     </BlueprintNodeInteractionContext.Provider>
   );
@@ -501,6 +650,7 @@ function BlueprintCanvasInner({ projectRoot, powerId }: PowerBlueprintCanvasProp
 
 function BlueprintNodeView({ data }: NodeProps<BlueprintFlowNode>) {
   const node = data.graphNode;
+  const interaction = React.useContext(BlueprintNodeInteractionContext);
 
   return (
     <section className={`blueprint-node blueprint-node-${node.color}`}>
@@ -515,7 +665,11 @@ function BlueprintNodeView({ data }: NodeProps<BlueprintFlowNode>) {
       )}
       <header className="blueprint-node-header">
         <span>{node.kind}</span>
-        <strong>{node.title}</strong>
+        {node.kind === "power" ? (
+          <EditablePowerNameInput node={node} interaction={interaction} />
+        ) : (
+          <strong>{node.title}</strong>
+        )}
         <small>{node.type}</small>
       </header>
       <div className="blueprint-node-fields">
@@ -526,6 +680,43 @@ function BlueprintNodeView({ data }: NodeProps<BlueprintFlowNode>) {
         )}
       </div>
     </section>
+  );
+}
+
+function EditablePowerNameInput({
+  node,
+  interaction
+}: {
+  node: BlueprintGraphNode;
+  interaction: BlueprintNodeInteraction | null;
+}) {
+  const [draft, setDraft] = useState(powerNodeDisplayName(node));
+
+  useEffect(() => {
+    setDraft(powerNodeDisplayName(node));
+  }, [node]);
+
+  const commit = useCallback(() => {
+    if (!interaction) return;
+    const committed = interaction.renamePowerNode(node.id, draft);
+    if (!committed) {
+      setDraft(powerNodeDisplayName(node));
+    }
+  }, [draft, interaction, node]);
+
+  return (
+    <input
+      className="power-node-name-input nodrag nowheel"
+      value={draft}
+      onFocus={() => interaction?.selectNode(node.id)}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+    />
   );
 }
 
@@ -608,6 +799,149 @@ function EditableFieldInput({
       }}
     />
   );
+}
+
+interface BlueprintUiState {
+  version: 1;
+  powerId: string;
+  updatedAt: string;
+  viewport?: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+  nodes: Array<{
+    id: string;
+    astNodeId: string;
+    type: string;
+    kind: SlotKind;
+    label?: string;
+    title: string;
+    signature: string;
+    occurrence: number;
+    position: XYPosition;
+  }>;
+  graph: BlueprintGraph;
+}
+
+function reactFlowToBlueprintGraph(nodes: BlueprintFlowNode[], edges: Edge[]): BlueprintGraph {
+  return {
+    nodes: nodes.map((node) => ({
+      ...node.data.graphNode,
+      position: node.position
+    })),
+    edges: edges.flatMap((edge, index): BlueprintGraphEdge[] => {
+      if (!edge.sourceHandle || !edge.targetHandle) return [];
+      const edgeData = edge.data as { color?: unknown; fieldName?: unknown; order?: unknown } | undefined;
+      const color = typeof edgeData?.color === "string" ? edgeData.color : edgeColorFromClassName(edge.className);
+      const fieldName = typeof edgeData?.fieldName === "string" ? edgeData.fieldName : fieldNameFromSourceHandle(edge.sourceHandle);
+      const order = typeof edgeData?.order === "number" ? edgeData.order : undefined;
+      return [
+        {
+          id: edge.id || `${edge.sourceHandle}->${edge.target}:${index}`,
+          source: edge.source,
+          target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
+          fieldName,
+          color,
+          order
+        }
+      ];
+    })
+  };
+}
+
+function createBlueprintState(
+  powerId: string,
+  graph: BlueprintGraph,
+  viewport: { x: number; y: number; zoom: number } | undefined
+): BlueprintUiState {
+  const occurrenceBySignature = new Map<string, number>();
+  return {
+    version: 1,
+    powerId,
+    updatedAt: new Date().toISOString(),
+    viewport,
+    nodes: graph.nodes.map((node) => {
+      const signature = nodeSignature(node);
+      const occurrence = occurrenceBySignature.get(signature) ?? 0;
+      occurrenceBySignature.set(signature, occurrence + 1);
+      return {
+        id: node.id,
+        astNodeId: node.astNodeId,
+        type: node.type,
+        kind: node.kind,
+        label: node.label,
+        title: node.title,
+        signature,
+        occurrence,
+        position: node.position
+      };
+    }),
+    graph
+  };
+}
+
+function applyBlueprintState(graph: BlueprintGraph, rawState: unknown): BlueprintGraph {
+  const state = parseBlueprintState(rawState);
+  if (!state) return graph;
+
+  const stateNodesById = new Map(state.nodes.flatMap((node) => [[node.id, node], [node.astNodeId, node]]));
+  const stateNodesBySignature = new Map<string, BlueprintUiState["nodes"][number]>();
+  for (const node of state.nodes) {
+    stateNodesBySignature.set(`${node.signature}#${node.occurrence}`, node);
+  }
+
+  const occurrenceBySignature = new Map<string, number>();
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      const signature = nodeSignature(node);
+      const occurrence = occurrenceBySignature.get(signature) ?? 0;
+      occurrenceBySignature.set(signature, occurrence + 1);
+      const stateNode = stateNodesById.get(node.id) ?? stateNodesById.get(node.astNodeId) ?? stateNodesBySignature.get(`${signature}#${occurrence}`);
+      if (!stateNode) return node;
+      return {
+        ...node,
+        position: stateNode.position,
+        ...(node.kind === "power"
+          ? {
+              label: stateNode.label,
+              title: stateNode.title
+            }
+          : {})
+      };
+    })
+  };
+}
+
+function blueprintStateViewport(rawState: unknown) {
+  return parseBlueprintState(rawState)?.viewport ?? null;
+}
+
+function parseBlueprintState(rawState: unknown): BlueprintUiState | null {
+  if (!rawState || typeof rawState !== "object") return null;
+  const state = rawState as Partial<BlueprintUiState>;
+  if (state.version !== 1 || !Array.isArray(state.nodes)) return null;
+  return state as BlueprintUiState;
+}
+
+function nodeSignature(node: BlueprintGraphNode) {
+  return `${node.kind}|${node.type}|${node.label ?? ""}|${node.title}`;
+}
+
+function powerNodeDisplayName(node: BlueprintGraphNode) {
+  return node.label && node.label !== "root" ? node.label : node.title;
+}
+
+function isValidPowerNodeName(value: string) {
+  return /^[a-z0-9_]+$/.test(value);
+}
+
+function edgeColorFromClassName(className: string | undefined) {
+  const match = className?.match(/blueprint-edge-([a-z_]+)/);
+  return match?.[1] ?? "unknown";
 }
 
 function synchronizeFieldConnectionState(nodes: BlueprintFlowNode[], edges: Edge[]): BlueprintFlowNode[] {
@@ -778,6 +1112,7 @@ function OptionalFieldsDialog({
 function createGraphField(nodeId: string, field: FieldSchema, nodeColor: string): BlueprintGraphField {
   return {
     name: field.name,
+    schema: field,
     valueKind: field.valueKind,
     displayValue: displayDefaultValue(field),
     connected: false,
@@ -822,12 +1157,11 @@ function findSourceField(nodes: BlueprintFlowNode[], sourceNodeId: string, sourc
   const sourceNode = nodes.find((node) => node.id === sourceNodeId);
   const field = sourceNode?.data.graphNode.fields.find((candidate) => candidate.sourceHandleId === sourceHandleIdValue);
   if (!sourceNode || !field) return null;
-  const schema = createFieldSchemaFromGraphField(field);
   const nodeSchema = sourceNode.data.graphNode;
   return {
     node: nodeSchema,
     field,
-    schema
+    schema: field.schema
   };
 }
 
@@ -892,6 +1226,12 @@ function nodeIdFromSourceHandle(sourceHandleIdValue: string) {
   const marker = ":out:";
   const markerIndex = sourceHandleIdValue.indexOf(marker);
   return markerIndex >= 0 ? sourceHandleIdValue.slice(0, markerIndex) : sourceHandleIdValue;
+}
+
+function fieldNameFromSourceHandle(sourceHandleIdValue: string) {
+  const marker = ":out:";
+  const markerIndex = sourceHandleIdValue.indexOf(marker);
+  return markerIndex >= 0 ? sourceHandleIdValue.slice(markerIndex + marker.length) : sourceHandleIdValue;
 }
 
 function datatypeFromFieldName(fieldName: string) {

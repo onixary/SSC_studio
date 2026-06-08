@@ -73,6 +73,7 @@ function toGraphField(nodeId: string, field: AstField, nodeColor: string): Bluep
 
   return {
     name: field.name,
+    schema: field.schema,
     valueKind: field.schema.valueKind,
     displayValue: displayValue(field.value, field.schema.valueKind),
     connected,
