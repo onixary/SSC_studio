@@ -4,6 +4,7 @@ import {
   bool,
   data,
   dataArray,
+  datatype,
   entityAction,
   entityCondition,
   float,
@@ -34,14 +35,23 @@ const simplePowerIds = [
   "sneaking_jump_clash",
   "t_wolf_friendly",
   "hiss_phantom",
+  "hiss_phantom_power",
   "bypasses_landing_effects",
+  "bypass_landing_effect",
   "bypasses_stepping_effects",
   "disable_player_rotation",
   "hide_tp_held_item",
-  "render_trinkets_slot"
+  "render_trinkets_slot",
+  "snowball_block_transform"
 ];
 
 export const sscBuiltinSchemas: NodeSchema[] = [
+  datatype(ns("mana_modifier"), [
+    float("add", { defaultValue: 0 }),
+    float("multiply", { defaultValue: 1 }),
+    float("add_total", { defaultValue: 0 })
+  ], { title: "SSC Mana Modifier" }),
+
   ...simplePowerIds.map((id) => power(ns(id))),
 
   power(ns("scale"), [float("scale", { defaultValue: 1 }), float("eye_scale", { defaultValue: 1 }), slot("condition", "entity_condition")]),
@@ -55,21 +65,52 @@ export const sscBuiltinSchemas: NodeSchema[] = [
     slot("condition", "entity_condition")
   ]),
   power(ns("add_immediate_instinct"), [str("instinct_effect_id", { required: true }), float("value", { defaultValue: 0 })]),
+  power(ns("bat_block_attach"), [
+    slot("attach_condition", "entity_condition"),
+    slot("block_condition", "block_condition"),
+    slot("side_attach_action", "entity_action"),
+    slot("bottom_attach_action", "entity_action"),
+    int("bottom_attach_interval", { defaultValue: 20 })
+  ]),
+  power(ns("burn_damage_modifier"), [float("modifier", { defaultValue: 1 }), slot("action", "entity_action"), slot("condition", "entity_condition")]),
+  power(ns("conditioned_modify_slipperiness"), [
+    slot("block_condition", "block_condition"),
+    slot("entity_condition", "entity_condition"),
+    float("modifier", { defaultValue: 1 }),
+    slot("condition", "entity_condition")
+  ]),
+  power(ns("crawling"), [
+    float("scale", { defaultValue: 1 }),
+    float("eye_scale", { defaultValue: 1 }),
+    float("active_scale", { defaultValue: 0.6 }),
+    float("active_eye_scale", { defaultValue: 0.35 }),
+    slot("condition", "entity_condition")
+  ]),
+  power(ns("critical_damage_modifier"), [slot("action", "entity_action"), float("multiplier", { defaultValue: 1.5 }), slot("condition", "entity_condition")]),
   power(ns("delay_attribute"), [
-    unknown("modifier", { required: true }),
+    data("modifier", "attributed_attribute_modifier"),
+    dataArray("modifiers", "attributed_attribute_modifier"),
     int("tick_rate", { required: true }),
     bool("updateHealth", { required: true }),
     int("delay", { required: true }),
     slot("condition", "entity_condition")
   ]),
   power(ns("conditioned_mana_attribute"), [
-    str("mana_type", { required: true }),
-    unknown("modifier", { required: true }),
+    str("modifierID"),
+    data("max_mana_modifier", ns("mana_modifier")),
+    data("regen_mana_modifier", ns("mana_modifier")),
+    bool("player_side", { defaultValue: false }),
     int("tick_rate", { required: true }),
     slot("condition", "entity_condition")
   ]),
-  power(ns("mana_attribute"), [str("mana_type", { required: true }), unknown("modifier", { required: true })]),
+  power(ns("mana_attribute"), [
+    str("modifierID"),
+    data("max_mana_modifier", ns("mana_modifier")),
+    data("regen_mana_modifier", ns("mana_modifier")),
+    bool("player_side", { defaultValue: false })
+  ]),
   power(ns("mana_type_power"), [str("mana_type", { required: true }), str("mana_source", { required: true })]),
+  power(ns("enhanced_falling_attack"), [slot("target_action_on_critical_hit", "entity_action"), slot("self_action_on_critical_hit", "entity_action"), slot("condition", "entity_condition")]),
   power(ns("charge_action"), [str("charge_power_id"), data("key", "key"), ...chargeTierFields(10)]),
   power(ns("action_on_sprinting_to_sneaking"), [slot("entity_action", "entity_action"), slot("entity_condition", "entity_condition")]),
   power(ns("action_on_jump"), [slot("entity_action", "entity_action"), slot("entity_condition", "entity_condition")]),
@@ -126,7 +167,18 @@ export const sscBuiltinSchemas: NodeSchema[] = [
     bool("always_edible", { required: true })
   ]),
   power(ns("custom_water_breathing"), [int("land_water_breathing_level", { defaultValue: 0 })]),
-  power(ns("in_water_speed_modifier"), [unknown("modifier", { required: true })]),
+  power(ns("in_water_speed_modifier"), [float("modifier", { defaultValue: 1 })]),
+  power(ns("levitate"), [
+    float("ascent_speed", { defaultValue: 0.5 }),
+    int("max_ascend_duration", { defaultValue: 40 }),
+    data("key", "key"),
+    data("hud_render", "hud_render"),
+    slot("condition", "entity_condition")
+  ]),
+  power(ns("simple_looting"), [int("level", { defaultValue: 1 }), int("max_level")]),
+  power(ns("modify_instant_damage_scale"), [float("scale", { defaultValue: 1 }), slot("condition", "entity_condition")]),
+  power(ns("modify_instant_health_scale"), [float("scale", { defaultValue: 1 }), slot("condition", "entity_condition")]),
+  power(ns("modify_potion_stack"), [int("count", { defaultValue: 1 }), slot("condition", "entity_condition")]),
   power(ns("modify_step_height"), [
     float("step_height_scale", { required: true }),
     slot("condition", "entity_condition"),
@@ -146,8 +198,38 @@ export const sscBuiltinSchemas: NodeSchema[] = [
   power(ns("slowdown_percent"), [float("slowdown_percent", { required: true })]),
   power(ns("apply_effect"), [dataArray("status_effects", "status_effect_instance")]),
   power(ns("optional_effect_immunity"), [str("effects"), slot("condition", "entity_condition")]),
-  power(ns("modify_fall_damage"), [unknown("modifier"), slot("condition", "entity_condition")]),
+  power(ns("modfiy_fall_damage"), [
+    data("modifier_fall_distance", "modifier"),
+    dataArray("modifiers_fall_distance", "modifier"),
+    data("modifier_damage_multiplier", "modifier"),
+    dataArray("modifiers_damage_multiplier", "modifier"),
+    slot("condition", "entity_condition")
+  ]),
+  power(ns("modify_fall_damage"), [
+    data("modifier_fall_distance", "modifier"),
+    dataArray("modifiers_fall_distance", "modifier"),
+    data("modifier_damage_multiplier", "modifier"),
+    dataArray("modifiers_damage_multiplier", "modifier"),
+    slot("condition", "entity_condition")
+  ], { title: "Modify Fall Damage (legacy spelling alias)" }),
   power(ns("modify_footstep_sound_speed"), [float("speed", { defaultValue: 1 }), slot("condition", "entity_condition")]),
+  power(ns("projectile_dodge"), [
+    slot("action", "entity_action"),
+    slot("entity_condition", "entity_condition"),
+    float("range", { defaultValue: 5 }),
+    float("dodge_speed", { defaultValue: 1 }),
+    float("trigger_distance", { defaultValue: 4 }),
+    int("cooldown", { defaultValue: 20 }),
+    slot("condition", "entity_condition")
+  ]),
+  power(ns("render_accessory_slot"), [
+    str("accessory_mod", { defaultValue: "auto" }),
+    str("accessory_group", { defaultValue: "" }),
+    str("accessory_slot", { defaultValue: "" }),
+    int("accessory_slot_index", { defaultValue: 0 }),
+    int("slot", { defaultValue: 0 }),
+    slot("condition", "entity_condition")
+  ]),
 
   entityAction(ns("add_instinct"), [str("instinct_effect_id", { required: true }), float("value", { defaultValue: 0 }), int("duration", { defaultValue: 1 })]),
   entityAction(ns("set_falling_distance"), [float("fall_distance", { required: true })]),
@@ -155,6 +237,7 @@ export const sscBuiltinSchemas: NodeSchema[] = [
   entityAction(ns("gain_mana"), [float("mana", { defaultValue: 0 })]),
   entityAction(ns("consume_mana"), [float("mana", { defaultValue: 0 })]),
   entityAction(ns("gain_mana_with_time"), [float("mana", { defaultValue: 0 }), int("time", { defaultValue: 0 })]),
+  entityAction(ns("set_item_cooldown"), [str("item"), int("cooldown", { defaultValue: 0 })]),
   entityAction(ns("transform_to_form"), [str("form_id"), bool("instant", { defaultValue: false })]),
   entityAction(ns("give_custom_transform_effect"), [str("form_id")]),
   entityAction(ns("explosion_damage_entity"), [
@@ -195,6 +278,7 @@ export const sscBuiltinSchemas: NodeSchema[] = [
   entityCondition(ns("mana_percent_compare"), [str("comparison"), float("compare_to", { defaultValue: 0 })]),
   entityCondition(ns("chance"), [float("chance", { required: true })]),
   entityCondition(ns("instinct_value"), [str("instinct_effect_id", { required: true }), str("comparison", { required: true }), float("compare_to", { required: true })]),
+  entityCondition(ns("barehand_digging")),
   entityCondition(ns("digging_bare_hand")),
   entityCondition(ns("jump_event")),
   entityCondition(ns("must_crawling")),
@@ -205,6 +289,7 @@ export const sscBuiltinSchemas: NodeSchema[] = [
   entityCondition(ns("is_sleep")),
   entityCondition(ns("equip_accessory"), [str("accessory_mod", { defaultValue: "auto" }), str("accessory")]),
   entityCondition(ns("check_accessory"), accessoryBaseFields([int("slot_index", { defaultValue: 0 }), slot("condition", "item_condition")])),
+  entityCondition(ns("is_item_in_cooldown"), [str("item")]),
 
   itemCondition(ns("is_weapon")),
   itemCondition(ns("is_morph_scale_item")),

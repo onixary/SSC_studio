@@ -19,6 +19,7 @@ export type FieldValueKind =
   | "number"
   | "boolean"
   | "enum"
+  | "json"
   | "slot"
   | "slot_array"
   | "datatype"

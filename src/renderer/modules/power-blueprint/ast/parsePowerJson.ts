@@ -1,6 +1,8 @@
 import type { AstField, AstNode, AstUnknownField, PowerAst } from "./powerAstTypes";
+import { scalarInputDatatypeFieldName } from "./datatypeScalarRules";
 import type { FieldSchema, SlotKind } from "../schema/blueprintSchemaTypes";
 import type { BlueprintSchemaRegistry } from "../schema/registry";
+import { RAW_JSON_NODE_TYPE } from "../schema/specialNodeTypes";
 
 interface ParseContext {
   registry: BlueprintSchemaRegistry;
@@ -101,6 +103,10 @@ function parseFieldValue(value: unknown, schema: FieldSchema, context: ParseCont
 }
 
 function parseDatatype(value: unknown, datatype: string, context: ParseContext) {
+  if (datatype === RAW_JSON_NODE_TYPE || !context.registry.get(datatype, "datatype")) {
+    return parseRawJson(value, context);
+  }
+
   if (datatype === "particle_effect") {
     return parseParticleEffect(value, context);
   }
@@ -109,12 +115,29 @@ function parseDatatype(value: unknown, datatype: string, context: ParseContext) 
     return parseNode({ type: "vector", ...(isRecord(value) ? value : {}) }, "datatype", context);
   }
 
-  const scalarFieldName = scalarDatatypeFieldName(datatype);
+  const scalarFieldName = scalarInputDatatypeFieldName(datatype);
   if (scalarFieldName && !isRecord(value)) {
     return parseNode({ type: datatype, [scalarFieldName]: value }, "datatype", context);
   }
 
   return parseNode({ type: datatype, ...(isRecord(value) ? value : {}) }, "datatype", context);
+}
+
+function parseRawJson(value: unknown, context: ParseContext): AstNode {
+  return {
+    id: `ast-${context.nextId++}`,
+    type: RAW_JSON_NODE_TYPE,
+    kind: "datatype",
+    fields: [
+      {
+        name: "json",
+        value: value as AstField["value"],
+        schema: { name: "json", valueKind: "json", required: true },
+        visible: true
+      }
+    ],
+    unknownFields: []
+  };
 }
 
 function parseParticleEffect(value: unknown, context: ParseContext): AstNode {
@@ -155,40 +178,4 @@ function parseParticleEffect(value: unknown, context: ParseContext): AstNode {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function scalarDatatypeFieldName(datatype: string) {
-  if (datatype === "crafting_recipe") return "recipe";
-  if (datatype === "default_translatable_text_component") return "translate";
-  if (datatype === "ingredient" || datatype === "item_stack") return "item";
-  if (datatype === "text") return "text";
-
-  if (
-    [
-      "action_result",
-      "attribute_modifier_operation",
-      "attributed_attribute_modifier_operation",
-      "comparison",
-      "container_type",
-      "destruction_type",
-      "entity_type_tag_like",
-      "fluid_handling",
-      "heightmap_type",
-      "identifier",
-      "inventory_type",
-      "item_slot",
-      "material",
-      "nbt",
-      "player_ability",
-      "process_mode",
-      "shape",
-      "shape_type",
-      "space",
-      "stat"
-    ].includes(datatype)
-  ) {
-    return "value";
-  }
-
-  return undefined;
 }

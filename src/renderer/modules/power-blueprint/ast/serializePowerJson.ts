@@ -1,4 +1,5 @@
 import type { AstNode, AstValue, PowerAst } from "./powerAstTypes";
+import { RAW_JSON_NODE_TYPE } from "../schema/specialNodeTypes";
 
 export function serializePowerAstToJson(ast: PowerAst): unknown {
   return serializeNode(ast.root);
@@ -45,6 +46,11 @@ function serializeDatatype(value: unknown, datatype?: string): unknown {
     return value;
   }
 
+  if (value.type === RAW_JSON_NODE_TYPE) {
+    const rawField = value.fields.find((field) => field.name === "json");
+    return rawField ? rawField.value : {};
+  }
+
   if (datatype === "vector") {
     const vector: Record<string, unknown> = {};
     for (const field of value.fields) {
@@ -63,16 +69,7 @@ function serializeDatatype(value: unknown, datatype?: string): unknown {
         particle[unknownField.name] = unknownField.value;
       }
     }
-    const keys = Object.keys(particle);
-    return keys.length === 1 && typeof particle.type === "string" ? particle.type : particle;
-  }
-
-  const scalarFieldName = datatype ? scalarDatatypeFieldName(datatype) : undefined;
-  if (scalarFieldName) {
-    const scalarField = value.fields.find((field) => field.name === scalarFieldName);
-    if (scalarField) {
-      return serializeFieldValue(scalarField.value, scalarField.schema.valueKind, scalarField.schema.datatype);
-    }
+    return particle;
   }
 
   return serializeDatatypeObject(value);
@@ -96,40 +93,4 @@ function serializeDatatypeObject(node: AstNode): Record<string, unknown> {
 
 function isAstNode(value: unknown): value is AstNode {
   return value !== null && typeof value === "object" && "id" in value && "fields" in value;
-}
-
-function scalarDatatypeFieldName(datatype: string) {
-  if (datatype === "crafting_recipe") return "recipe";
-  if (datatype === "default_translatable_text_component") return "translate";
-  if (datatype === "ingredient" || datatype === "item_stack") return "item";
-  if (datatype === "text") return "text";
-
-  if (
-    [
-      "action_result",
-      "attribute_modifier_operation",
-      "attributed_attribute_modifier_operation",
-      "comparison",
-      "container_type",
-      "destruction_type",
-      "entity_type_tag_like",
-      "fluid_handling",
-      "heightmap_type",
-      "identifier",
-      "inventory_type",
-      "item_slot",
-      "material",
-      "nbt",
-      "player_ability",
-      "process_mode",
-      "shape",
-      "shape_type",
-      "space",
-      "stat"
-    ].includes(datatype)
-  ) {
-    return "value";
-  }
-
-  return undefined;
 }

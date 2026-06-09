@@ -152,13 +152,21 @@ function resolveFieldSchema(
 function parseScalarDisplayValue(
   field: BlueprintGraphField,
   inputKind: BlueprintGraphField["inputKind"]
-): string | number | boolean | null {
+): AstValue {
   const displayValue = field.displayValue;
   if (inputKind === "boolean") {
     const normalized = displayValue.trim().toLowerCase();
     if (normalized === "true") return true;
     if (normalized === "false") return false;
     throw new Error(`保存失败：参数 ${field.name} 不是合法 boolean。`);
+  }
+
+  if (inputKind === "json") {
+    try {
+      return JSON.parse(displayValue) as AstValue;
+    } catch {
+      throw new Error(`保存失败：参数 ${field.name} 不是合法 JSON。`);
+    }
   }
 
   if (inputKind === "int") {
@@ -185,6 +193,7 @@ function parseScalarDisplayValue(
 function scalarInputKind(schema: FieldSchema): BlueprintGraphField["inputKind"] {
   if (schema.valueKind === "number") return schema.numberKind ?? "float";
   if (schema.valueKind === "boolean") return "boolean";
+  if (schema.valueKind === "json") return "json";
   if (schema.valueKind === "string" || schema.valueKind === "enum") return "string";
   return undefined;
 }

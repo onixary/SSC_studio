@@ -1,6 +1,14 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { CreatePowerResult, ProjectData, ProjectForm, ProjectPower, ProjectValidation } from "./vite-env";
+import type {
+  AddPowerToFormResult,
+  CreatePowerResult,
+  ProjectData,
+  ProjectForm,
+  ProjectPower,
+  ProjectValidation,
+  RemovePowerFromFormResult
+} from "./vite-env";
 import { PowerBlueprintCanvas, type PowerBlueprintCanvasHandle } from "./modules/power-blueprint/ui/BlueprintCanvas";
 import "./styles/app.css";
 
@@ -204,6 +212,14 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createError, setCreateError] = useState("");
+  const [addExistingOpen, setAddExistingOpen] = useState(false);
+  const [addExistingQuery, setAddExistingQuery] = useState("");
+  const [addExistingPowerId, setAddExistingPowerId] = useState("");
+  const [addExistingError, setAddExistingError] = useState("");
+  const [removePowerOpen, setRemovePowerOpen] = useState(false);
+  const [removePowerQuery, setRemovePowerQuery] = useState("");
+  const [removePowerId, setRemovePowerId] = useState("");
+  const [removePowerError, setRemovePowerError] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
 
   const loadData = useCallback(async () => {
@@ -272,6 +288,7 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     return output;
   }, [independentPowers, isIndependentScope, powerById, selectedForm]);
 
+  const selectedFormPowerIds = useMemo(() => new Set(selectedForm?.powers ?? []), [selectedForm]);
   const selectedPower = powerById.get(selectedPowerId) ?? null;
 
   const runGuarded = useCallback(
@@ -346,6 +363,26 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     });
   }, [runGuarded]);
 
+  const requestAddExisting = useCallback(() => {
+    if (!selectedForm) return;
+    runGuarded(() => {
+      setAddExistingOpen(true);
+      setAddExistingQuery("");
+      setAddExistingPowerId("");
+      setAddExistingError("");
+    });
+  }, [runGuarded, selectedForm]);
+
+  const requestRemovePower = useCallback(() => {
+    if (!selectedForm) return;
+    runGuarded(() => {
+      setRemovePowerOpen(true);
+      setRemovePowerQuery("");
+      setRemovePowerId("");
+      setRemovePowerError("");
+    });
+  }, [runGuarded, selectedForm]);
+
   const createPower = useCallback(async () => {
     if (!window.ssc) {
       setCreateError("新建 Power 需要在 Electron 桌面窗口中使用。");
@@ -369,6 +406,64 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
     setSelectedPowerId(result.power.id);
     setDirty(false);
   }, [createName, isIndependentScope, loadData, projectRoot, selectedFormId]);
+
+  const addExistingPower = useCallback(async () => {
+    if (!window.ssc || !selectedForm) {
+      setAddExistingError("Select a form before adding an existing Power.");
+      return;
+    }
+    if (!addExistingPowerId) {
+      setAddExistingError("Select a Power to add.");
+      return;
+    }
+
+    setAddExistingError("");
+    const result: AddPowerToFormResult = await window.ssc.addPowerToForm({
+      rootPath: projectRoot,
+      formId: selectedForm.id,
+      powerId: addExistingPowerId
+    });
+
+    if (!result.ok) {
+      setAddExistingError(result.reason ?? "Failed to add Power to form.");
+      return;
+    }
+
+    setAddExistingOpen(false);
+    await loadData();
+    setSelectedPowerId(result.powerId ?? addExistingPowerId);
+    setDirty(false);
+  }, [addExistingPowerId, loadData, projectRoot, selectedForm]);
+
+  const removePowerFromForm = useCallback(async () => {
+    if (!window.ssc || !selectedForm) {
+      setRemovePowerError("Select a form before removing a Power.");
+      return;
+    }
+    if (!removePowerId) {
+      setRemovePowerError("Select a Power to remove.");
+      return;
+    }
+
+    setRemovePowerError("");
+    const result: RemovePowerFromFormResult = await window.ssc.removePowerFromForm({
+      rootPath: projectRoot,
+      formId: selectedForm.id,
+      powerId: removePowerId
+    });
+
+    if (!result.ok) {
+      setRemovePowerError(result.reason ?? "Failed to remove Power from form.");
+      return;
+    }
+
+    setRemovePowerOpen(false);
+    await loadData();
+    if (selectedPowerId === removePowerId) {
+      setSelectedPowerId("");
+    }
+    setDirty(false);
+  }, [loadData, projectRoot, removePowerId, selectedForm, selectedPowerId]);
 
   return (
     <main className="power-page">
@@ -411,6 +506,12 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
           <div className="column-title">选择或新建 Power</div>
           <button className="secondary-button" disabled={!hasPowerScope} onClick={requestCreate}>
             + 新建 Power
+          </button>
+          <button className="secondary-button" disabled={!selectedForm} onClick={requestAddExisting}>
+            + Add Existing Power
+          </button>
+          <button className="secondary-button" disabled={!selectedForm || visiblePowers.length === 0} onClick={requestRemovePower}>
+            - Remove Power
           </button>
           <div className="scroll-list">
             {visiblePowers.map((power) => (
@@ -461,6 +562,33 @@ function PowerBlueprintPage({ projectRoot, onBack }: { projectRoot: string; onBa
           onChange={setCreateName}
           onCancel={() => setCreateOpen(false)}
           onConfirm={createPower}
+        />
+      )}
+
+      {addExistingOpen && (
+        <AddExistingPowerDialog
+          powers={data?.powers ?? []}
+          existingPowerIds={selectedFormPowerIds}
+          selectedPowerId={addExistingPowerId}
+          query={addExistingQuery}
+          error={addExistingError}
+          onQueryChange={setAddExistingQuery}
+          onSelect={setAddExistingPowerId}
+          onCancel={() => setAddExistingOpen(false)}
+          onConfirm={addExistingPower}
+        />
+      )}
+
+      {removePowerOpen && (
+        <RemovePowerDialog
+          powers={visiblePowers}
+          selectedPowerId={removePowerId}
+          query={removePowerQuery}
+          error={removePowerError}
+          onQueryChange={setRemovePowerQuery}
+          onSelect={setRemovePowerId}
+          onCancel={() => setRemovePowerOpen(false)}
+          onConfirm={removePowerFromForm}
         />
       )}
 
@@ -548,6 +676,149 @@ function CreatePowerDialog({
         <div className="modal-actions">
           <button className="secondary-button" onClick={onConfirm}>创建</button>
           <button className="danger-button" onClick={onCancel}>取消</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AddExistingPowerDialog({
+  powers,
+  existingPowerIds,
+  selectedPowerId,
+  query,
+  error,
+  onQueryChange,
+  onSelect,
+  onCancel,
+  onConfirm
+}: {
+  powers: ProjectPower[];
+  existingPowerIds: Set<string>;
+  selectedPowerId: string;
+  query: string;
+  error: string;
+  onQueryChange: (value: string) => void;
+  onSelect: (powerId: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPowers = powers.filter((power) => {
+    if (!normalizedQuery) return true;
+    return power.name.toLowerCase().includes(normalizedQuery) || power.id.toLowerCase().includes(normalizedQuery);
+  });
+  const selectedAlreadyAdded = selectedPowerId ? existingPowerIds.has(selectedPowerId) : false;
+
+  return (
+    <div className="modal-backdrop">
+      <section className="modal-panel add-existing-power-panel">
+        <h2>Add Existing Power</h2>
+        <input
+          autoFocus
+          className="text-input"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Search power name"
+        />
+        <div className="existing-power-list">
+          {filteredPowers.length === 0 ? (
+            <div className="existing-power-empty">No matching Power</div>
+          ) : (
+            filteredPowers.map((power) => {
+              const alreadyAdded = existingPowerIds.has(power.id);
+              const selected = power.id === selectedPowerId;
+              return (
+                <button
+                  key={power.id}
+                  className={selected ? "existing-power-row selected" : "existing-power-row"}
+                  disabled={alreadyAdded}
+                  onClick={() => onSelect(power.id)}
+                >
+                  <span>{power.name}</span>
+                  <small>{alreadyAdded ? "Already added" : power.type}</small>
+                </button>
+              );
+            })
+          )}
+        </div>
+        <p className={error ? "input-help error-text" : "input-help"}>
+          {error || "Select a Power and confirm to append it to the current form."}
+        </p>
+        <div className="modal-actions">
+          <button className="secondary-button" disabled={!selectedPowerId || selectedAlreadyAdded} onClick={onConfirm}>
+            Add
+          </button>
+          <button className="danger-button" onClick={onCancel}>Cancel</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RemovePowerDialog({
+  powers,
+  selectedPowerId,
+  query,
+  error,
+  onQueryChange,
+  onSelect,
+  onCancel,
+  onConfirm
+}: {
+  powers: ProjectPower[];
+  selectedPowerId: string;
+  query: string;
+  error: string;
+  onQueryChange: (value: string) => void;
+  onSelect: (powerId: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredPowers = powers.filter((power) => {
+    if (!normalizedQuery) return true;
+    return power.name.toLowerCase().includes(normalizedQuery) || power.id.toLowerCase().includes(normalizedQuery);
+  });
+
+  return (
+    <div className="modal-backdrop">
+      <section className="modal-panel add-existing-power-panel">
+        <h2>Remove Power From Form</h2>
+        <input
+          autoFocus
+          className="text-input"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Search registered power"
+        />
+        <div className="existing-power-list">
+          {filteredPowers.length === 0 ? (
+            <div className="existing-power-empty">No registered Power matched</div>
+          ) : (
+            filteredPowers.map((power) => {
+              const selected = power.id === selectedPowerId;
+              return (
+                <button
+                  key={power.id}
+                  className={selected ? "existing-power-row selected" : "existing-power-row"}
+                  onClick={() => onSelect(power.id)}
+                >
+                  <span>{power.name}</span>
+                  <small>{power.type}</small>
+                </button>
+              );
+            })
+          )}
+        </div>
+        <p className={error ? "input-help error-text" : "input-help"}>
+          {error || "Select a registered Power and confirm to remove only its origin reference."}
+        </p>
+        <div className="modal-actions">
+          <button className="danger-button" disabled={!selectedPowerId} onClick={onConfirm}>
+            Remove
+          </button>
+          <button className="secondary-button" onClick={onCancel}>Cancel</button>
         </div>
       </section>
     </div>

@@ -1,10 +1,12 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const {
+  addPowerToForm,
   createPower,
   getProjectData,
   readBlueprintState,
   readPowerJson,
+  removePowerFromForm,
   saveBlueprintState,
   savePowerJson,
   validateProject
@@ -53,6 +55,8 @@ app.whenReady().then(() => {
   ipcMain.handle("workspace:validateProject", async (_event, rootPath) => validateProject(rootPath));
   ipcMain.handle("workspace:getProjectData", async (_event, rootPath) => getProjectData(rootPath));
   ipcMain.handle("workspace:createPower", async (_event, payload) => createPower(payload));
+  ipcMain.handle("workspace:addPowerToForm", async (_event, payload) => addPowerToForm(payload));
+  ipcMain.handle("workspace:removePowerFromForm", async (_event, payload) => removePowerFromForm(payload));
   ipcMain.handle("workspace:readPowerJson", async (_event, payload) => readPowerJson(payload));
   ipcMain.handle("workspace:savePowerJson", async (_event, payload) => savePowerJson(payload));
   ipcMain.handle("workspace:readBlueprintState", async (_event, payload) => readBlueprintState(payload));

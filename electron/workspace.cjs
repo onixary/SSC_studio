@@ -205,6 +205,94 @@ async function createPower({ rootPath, formId, powerName }) {
   };
 }
 
+async function addPowerToForm({ rootPath, formId, powerId }) {
+  const validation = await validateProject(rootPath);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+
+  const formNameError = validatePowerName(formId);
+  if (formNameError) {
+    return { ok: false, reason: "Form id invalid." };
+  }
+
+  const powerName = powerNameFromId(powerId);
+  const powerNameError = validatePowerName(powerName);
+  if (powerNameError) {
+    return { ok: false, reason: powerNameError };
+  }
+
+  const paths = projectPaths(rootPath);
+  const originPath = path.join(paths.originsDir, `${formId}.json`);
+  if (!(await exists(originPath))) {
+    return { ok: false, reason: "Form JSON does not exist." };
+  }
+
+  const powerPath = path.join(paths.powersDir, `${powerName}.json`);
+  if (!(await exists(powerPath))) {
+    return { ok: false, reason: "Power JSON does not exist." };
+  }
+
+  try {
+    const origin = await readJson(originPath);
+    const normalizedPowers = uniqueStrings(Array.isArray(origin.powers) ? origin.powers : []);
+    const normalizedPowerId = powerIdFromName(powerName);
+    if (!normalizedPowers.includes(normalizedPowerId)) {
+      normalizedPowers.push(normalizedPowerId);
+    }
+    origin.powers = normalizedPowers;
+    await fs.writeFile(originPath, `${JSON.stringify(origin, null, 2)}\n`, "utf-8");
+    return { ok: true, formId, powerId: normalizedPowerId };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "Failed to add existing Power to form."
+    };
+  }
+}
+
+async function removePowerFromForm({ rootPath, formId, powerId }) {
+  const validation = await validateProject(rootPath);
+  if (!validation.ok) {
+    return { ok: false, reason: validation.reason };
+  }
+
+  const formNameError = validatePowerName(formId);
+  if (formNameError) {
+    return { ok: false, reason: "Form id invalid." };
+  }
+
+  const powerName = powerNameFromId(powerId);
+  const powerNameError = validatePowerName(powerName);
+  if (powerNameError) {
+    return { ok: false, reason: powerNameError };
+  }
+
+  const paths = projectPaths(rootPath);
+  const originPath = path.join(paths.originsDir, `${formId}.json`);
+  if (!(await exists(originPath))) {
+    return { ok: false, reason: "Form JSON does not exist." };
+  }
+
+  try {
+    const origin = await readJson(originPath);
+    const normalizedPowerId = powerIdFromName(powerName);
+    const normalizedPowers = uniqueStrings(Array.isArray(origin.powers) ? origin.powers : []);
+    if (!normalizedPowers.includes(normalizedPowerId)) {
+      return { ok: false, reason: "Power is not registered on this form." };
+    }
+
+    origin.powers = normalizedPowers.filter((candidate) => candidate !== normalizedPowerId);
+    await fs.writeFile(originPath, `${JSON.stringify(origin, null, 2)}\n`, "utf-8");
+    return { ok: true, formId, powerId: normalizedPowerId };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "Failed to remove Power from form."
+    };
+  }
+}
+
 async function readPowerJson({ rootPath, powerId }) {
   const validation = await validateProject(rootPath);
   if (!validation.ok) {
@@ -338,12 +426,14 @@ async function saveBlueprintState({ rootPath, powerId, state }) {
 }
 
 module.exports = {
+  addPowerToForm,
   createPower,
   getProjectData,
   powerNameFromId,
   projectPaths,
   readBlueprintState,
   readPowerJson,
+  removePowerFromForm,
   saveBlueprintState,
   savePowerJson,
   validatePowerName,

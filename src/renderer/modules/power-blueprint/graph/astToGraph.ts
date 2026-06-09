@@ -1,6 +1,7 @@
 import type { AstField, AstNode, AstValue, PowerAst } from "../ast/powerAstTypes";
 import type { BlueprintSchemaRegistry } from "../schema/registry";
 import type { SlotKind } from "../schema/blueprintSchemaTypes";
+import { RAW_JSON_NODE_TYPE } from "../schema/specialNodeTypes";
 import type { BlueprintGraph, BlueprintGraphEdge, BlueprintGraphField, BlueprintGraphNode } from "./blueprintGraphTypes";
 
 const NODE_X_STEP = 510;
@@ -19,7 +20,7 @@ export function astToBlueprintGraph(ast: PowerAst, registry: BlueprintSchemaRegi
 
     const graphNodeId = node.id;
     const schema = registry.get(node.type, node.kind);
-    const nodeColor = colorForSlotKind(node.kind);
+    const nodeColor = node.type === RAW_JSON_NODE_TYPE ? "raw-json" : colorForSlotKind(node.kind);
     nodes.push({
       id: graphNodeId,
       astNodeId: node.id,
@@ -89,6 +90,7 @@ function inputKindForField(schema: AstField["schema"]): BlueprintGraphField["inp
   if (schema.valueKind === "number") return schema.numberKind ?? "float";
   if (schema.valueKind === "string" || schema.valueKind === "enum") return "string";
   if (schema.valueKind === "boolean") return "boolean";
+  if (schema.valueKind === "json") return "json";
   return undefined;
 }
 
@@ -99,6 +101,10 @@ function colorForField(field: AstField, nodeColor: string) {
 
   if (field.schema.valueKind === "datatype" || field.schema.valueKind === "datatype_array") {
     return "datatype";
+  }
+
+  if (field.schema.valueKind === "json") {
+    return "raw-json";
   }
 
   return "scalar";
@@ -134,6 +140,10 @@ export function targetHandleId(nodeId: string) {
 }
 
 function displayValue(value: AstValue, valueKind: string) {
+  if (valueKind === "json") {
+    return stringifyJsonValue(value);
+  }
+
   if ((valueKind === "slot_array" || valueKind === "datatype_array") && Array.isArray(value)) {
     return `Array[${value.length}]`;
   }
@@ -155,6 +165,14 @@ function displayValue(value: AstValue, valueKind: string) {
   }
 
   return String(value);
+}
+
+function stringifyJsonValue(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function readableTypeName(type: string) {

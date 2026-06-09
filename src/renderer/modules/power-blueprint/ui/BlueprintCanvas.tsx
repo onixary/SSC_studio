@@ -27,6 +27,7 @@ import type { PowerAst } from "../ast/powerAstTypes";
 import { parsePowerJsonToAst } from "../ast/parsePowerJson";
 import { serializePowerAstToJson } from "../ast/serializePowerJson";
 import { createExampleSchemaRegistry } from "../schema/exampleSchemas";
+import { RAW_JSON_NODE_TYPE } from "../schema/specialNodeTypes";
 
 export interface PowerBlueprintCanvasProps {
   projectRoot: string;
@@ -282,7 +283,7 @@ function BlueprintCanvasInner(
     (schema: NodeSchema) => {
       if (!nodeMenu) return;
       const kind = nodeMenu.slotKind && schema.kind !== "datatype" ? nodeMenu.slotKind : schema.kind;
-      const color = colorForSlotKind(kind);
+      const color = colorForNodeSchema(schema, kind);
       const id = `new-${nextNodeIdRef.current++}`;
       const graphNode: BlueprintGraphNode = {
         id,
@@ -909,6 +910,24 @@ function EditableFieldInput({
     );
   }
 
+  if (field.inputKind === "json") {
+    return (
+      <textarea
+        className="field-json-input nodrag nowheel"
+        value={draft}
+        rows={Math.min(12, Math.max(4, draft.split("\n").length))}
+        onFocus={() => interaction?.selectNode(nodeId)}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <input
       className="field-value-input nodrag nowheel"
@@ -1184,12 +1203,17 @@ function NodeCreateMenu({
   onClose: () => void;
 }) {
   const [expandedDrawers, setExpandedDrawers] = useState<Set<string>>(
-    () => new Set(["data_type", "power", "action", "condition", "misc"])
+    () => new Set(["raw_json", "data_type", "power", "action", "condition", "misc"])
   );
   const query = state.query.trim().toLowerCase();
   const filteredSchemas = schemas.filter((schema) => {
     if (schema.type === "origins:multiple") return false;
-    if (state.datatype && (schema.kind !== "datatype" || schema.type !== state.datatype)) return false;
+    if (
+      state.datatype &&
+      (schema.kind !== "datatype" || (schema.type !== state.datatype && schema.type !== RAW_JSON_NODE_TYPE))
+    ) {
+      return false;
+    }
     if (state.slotKind && schema.kind !== state.slotKind && !isContextualSchema(schema, state.slotKind)) return false;
     if (!query) return true;
     const title = schema.title ?? readableTypeName(schema.type);
@@ -1286,7 +1310,7 @@ function NodeMenuDrawer({
 
   const open = forceOpen || expandedDrawers.has(category.id);
   return (
-    <section className={`node-menu-drawer level-${level}`}>
+    <section className={`node-menu-drawer level-${level} node-menu-drawer-${category.id}`}>
       <button
         type="button"
         className="node-menu-drawer-title"
@@ -1313,7 +1337,7 @@ function NodeMenuDrawer({
           {category.schemas.map((schema) => (
             <button
               key={`${schema.kind}:${schema.type}`}
-              className="node-create-option"
+              className={schema.type === RAW_JSON_NODE_TYPE ? "node-create-option raw-json-option" : "node-create-option"}
               style={{
                 marginLeft: 10 + level * 14,
                 width: `calc(100% - ${10 + level * 14}px)`
@@ -1332,6 +1356,7 @@ function NodeMenuDrawer({
 
 function buildNodeMenuCategories(schemas: NodeSchema[]): NodeMenuCategory[] {
   const roots = [
+    createCategory("raw_json", "Raw Json"),
     createCategory("data_type", "Data Type"),
     createCategory("power", "Power"),
     createCategory("action", "Action"),
@@ -1376,6 +1401,12 @@ function countCategorySchemas(categories: NodeMenuCategory[]): number {
 }
 
 function categoryPathForSchema(schema: NodeSchema) {
+  if (schema.type === RAW_JSON_NODE_TYPE) {
+    return [
+      { id: "raw_json", label: "Raw Json" }
+    ];
+  }
+
   if (schema.kind === "datatype") {
     return [
       { id: "data_type", label: "Data Types" }
@@ -1519,12 +1550,14 @@ function inputKindForFieldSchema(field: FieldSchema): BlueprintGraphField["input
   if (field.valueKind === "number") return field.numberKind ?? "float";
   if (field.valueKind === "string" || field.valueKind === "enum") return "string";
   if (field.valueKind === "boolean") return "boolean";
+  if (field.valueKind === "json") return "json";
   return undefined;
 }
 
 function displayDefaultValue(field: FieldSchema) {
   if (field.valueKind === "slot" || field.valueKind === "datatype") return "Disconnected";
   if (field.valueKind === "slot_array" || field.valueKind === "datatype_array") return "Array[0]";
+  if (field.valueKind === "json") return stringifyJsonValue(field.defaultValue ?? {});
   if (field.defaultValue === undefined) return "";
   if (field.defaultValue === null) return "null";
   return String(field.defaultValue);
@@ -1535,7 +1568,13 @@ function colorForFieldSchema(field: FieldSchema, nodeColor: string) {
     return colorForSlotKind(field.slotKind ?? "unknown");
   }
   if (field.valueKind === "datatype" || field.valueKind === "datatype_array") return "datatype";
+  if (field.valueKind === "json") return "raw-json";
   return "scalar";
+}
+
+function colorForNodeSchema(schema: NodeSchema, kind: SlotKind) {
+  if (schema.type === RAW_JSON_NODE_TYPE) return "raw-json";
+  return colorForSlotKind(kind);
 }
 
 function colorForSlotKind(kind: SlotKind) {
@@ -1606,6 +1645,14 @@ function parseInputValue(rawValue: string, inputKind: NonNullable<BlueprintGraph
     return rawValue;
   }
 
+  if (inputKind === "json") {
+    try {
+      return JSON.stringify(JSON.parse(rawValue), null, 2);
+    } catch {
+      return null;
+    }
+  }
+
   if (inputKind === "boolean") {
     const normalized = rawValue.trim().toLowerCase();
     if (normalized === "true") return "true";
@@ -1621,6 +1668,14 @@ function parseInputValue(rawValue: string, inputKind: NonNullable<BlueprintGraph
 
   if (!/^-?(?:\d+|\d+\.\d+|\.\d+)$/.test(trimmed)) return null;
   return String(Number.parseFloat(trimmed));
+}
+
+function stringifyJsonValue(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
 }
 
 function nodeIdFromSourceHandle(sourceHandleIdValue: string) {

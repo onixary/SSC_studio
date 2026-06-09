@@ -28,7 +28,7 @@ export interface BlueprintGraphField {
   displayValue: string;
   connected: boolean;
   color: string;
-  inputKind?: "int" | "float" | "string" | "boolean";
+  inputKind?: "int" | "float" | "string" | "boolean" | "json";
   sourceHandleId: string;
 }
 

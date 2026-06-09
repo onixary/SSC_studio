@@ -32,6 +32,20 @@ export interface CreatePowerResult {
   power?: ProjectPower;
 }
 
+export interface AddPowerToFormResult {
+  ok: boolean;
+  reason?: string;
+  formId?: string;
+  powerId?: string;
+}
+
+export interface RemovePowerFromFormResult {
+  ok: boolean;
+  reason?: string;
+  formId?: string;
+  powerId?: string;
+}
+
 export interface ReadPowerJsonResult {
   ok: boolean;
   reason?: string;
@@ -77,6 +91,16 @@ declare global {
         formId?: string;
         powerName: string;
       }) => Promise<CreatePowerResult>;
+      addPowerToForm: (payload: {
+        rootPath: string;
+        formId: string;
+        powerId: string;
+      }) => Promise<AddPowerToFormResult>;
+      removePowerFromForm: (payload: {
+        rootPath: string;
+        formId: string;
+        powerId: string;
+      }) => Promise<RemovePowerFromFormResult>;
       readPowerJson: (payload: {
         rootPath: string;
         powerId: string;

@@ -101,6 +101,10 @@ export function bool(name: string, options: FieldOptions = {}): FieldSchema {
   return { name, valueKind: "boolean", ...options };
 }
 
+export function json(name: string, options: FieldOptions = {}): FieldSchema {
+  return { name, valueKind: "json", ...options };
+}
+
 export function unknown(name: string, options: FieldOptions = {}): FieldSchema {
   return { name, valueKind: "unknown", ...options };
 }
